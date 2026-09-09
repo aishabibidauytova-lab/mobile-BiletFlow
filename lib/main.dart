@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'event_selection_screen.dart';
 
 void main() {
   runApp(const BiletFlowApp());
@@ -11,9 +12,7 @@ class BiletFlowApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'BiletFlow Admin',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue),
       home: const LoginScreen(),
     );
   }
@@ -25,9 +24,7 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('BiletFlow Check-In'),
-      ),
+      appBar: AppBar(title: const Text('BiletFlow Check-In')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -50,7 +47,12 @@ class LoginScreen extends StatelessWidget {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
-                // Здесь будет логика входа
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EventSelectionScreen(),
+                  ),
+                );
               },
               child: const Text('Войти'),
             ),
