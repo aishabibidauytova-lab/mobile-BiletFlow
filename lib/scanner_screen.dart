@@ -12,7 +12,6 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen> {
   int checkedInCount = 145;
   final int totalCount = 300;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
