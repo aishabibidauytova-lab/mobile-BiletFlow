@@ -3,7 +3,6 @@ import 'scanner_screen.dart';
 
 class EventSelectionScreen extends StatelessWidget {
   const EventSelectionScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
