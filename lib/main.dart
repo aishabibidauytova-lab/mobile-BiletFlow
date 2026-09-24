@@ -7,7 +7,6 @@ void main() {
 
 class BiletFlowApp extends StatelessWidget {
   const BiletFlowApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
