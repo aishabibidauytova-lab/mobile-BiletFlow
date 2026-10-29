@@ -16,10 +16,10 @@ class AttendeeSearchScreen extends StatefulWidget {
 class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
   final _controller = TextEditingController();
   Timer? _debounce;
-  List<Attendee> _items = [];
+  List<Ticket> _items = [];
   bool _loading = true;
   String? _error;
-  final Set<String> _working = {};
+  final Set<int> _working = {};
 
   @override
   void initState() {
@@ -58,19 +58,17 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
   void _toast(String msg) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg)));
 
-  Future<void> _checkIn(Attendee a) async {
-    setState(() => _working.add(a.ticketId));
+  Future<void> _checkIn(Ticket a) async {
+    setState(() => _working.add(a.id));
     try {
-      final r = await api.checkInByTicketId(widget.event.id, a.ticketId);
+      final r = await api.checkIn(widget.event.id, a.code);
       switch (r.outcome) {
         case ScanOutcome.success:
-          _toast('Чек-ин выполнен: ${a.name}');
+          _toast('Чек-ин выполнен: ${a.attendeeEmail}');
         case ScanOutcome.alreadyUsed:
           _toast('Билет уже использован');
         case ScanOutcome.cancelled:
           _toast('Билет отменён');
-        case ScanOutcome.refunded:
-          _toast('Билет возвращён');
         default:
           _toast(r.message ?? 'Не удалось выполнить чек-ин');
       }
@@ -78,16 +76,16 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
     } on ApiException catch (e) {
       _toast(e.message);
     } finally {
-      if (mounted) setState(() => _working.remove(a.ticketId));
+      if (mounted) setState(() => _working.remove(a.id));
     }
   }
 
-  Future<void> _undo(Attendee a) async {
+  Future<void> _undo(Ticket a) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Отменить чек-ин?'),
-        content: Text('${a.name} (${a.ticketId}) снова станет «не прибыл».'),
+        content: Text('${a.attendeeEmail} (${a.code}) снова станет «не прибыл».'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c, false),
@@ -99,15 +97,15 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
       ),
     );
     if (ok != true) return;
-    setState(() => _working.add(a.ticketId));
+    setState(() => _working.add(a.id));
     try {
-      await api.undoCheckIn(widget.event.id, a.ticketId);
+      await api.undoCheckIn(widget.event.id, a.id);
       _toast('Чек-ин отменён');
       await _search(_controller.text);
     } on ApiException catch (e) {
       _toast(e.message);
     } finally {
-      if (mounted) setState(() => _working.remove(a.ticketId));
+      if (mounted) setState(() => _working.remove(a.id));
     }
   }
 
@@ -115,12 +113,10 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
     switch (s) {
       case TicketStatus.valid:
         return ('Не прибыл', Colors.blueGrey);
-      case TicketStatus.checkedIn:
+      case TicketStatus.used:
         return ('Прибыл', Colors.green.shade700);
       case TicketStatus.cancelled:
         return ('Отменён', Colors.red.shade700);
-      case TicketStatus.refunded:
-        return ('Возврат', Colors.red.shade700);
     }
   }
 
@@ -137,7 +133,7 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
               onChanged: _onChanged,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Имя, email или номер билета',
+                hintText: 'Email или код билета',
                 prefixIcon: const Icon(Icons.search),
                 border: const OutlineInputBorder(),
                 suffixIcon: _controller.text.isEmpty
@@ -168,14 +164,10 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
                     itemBuilder: (context, i) {
                       final a = _items[i];
                       final (label, color) = _statusLabel(a.status);
-                      final busy = _working.contains(a.ticketId);
+                      final busy = _working.contains(a.id);
                       return ListTile(
-                        title: Text(a.name),
-                        subtitle: Text([
-                          a.ticketId,
-                          a.ticketType,
-                          if (a.seat != null) a.seat!,
-                        ].join(' • ')),
+                        title: Text(a.attendeeEmail),
+                        subtitle: Text([a.code, a.ticketTypeName].join(' • ')),
                         trailing: busy
                             ? const SizedBox(
                                 width: 24,
@@ -192,18 +184,17 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
     );
   }
 
-  Widget _trailing(Attendee a, String label, Color color) {
+  Widget _trailing(Ticket a, String label, Color color) {
     switch (a.status) {
       case TicketStatus.valid:
         return FilledButton(
             onPressed: () => _checkIn(a), child: const Text('Чек-ин'));
-      case TicketStatus.checkedIn:
+      case TicketStatus.used:
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(label, style: TextStyle(color: color)),
-            if (widget.event.canUndo)
-              IconButton(
+            IconButton(
                 tooltip: 'Отменить чек-ин',
                 icon: const Icon(Icons.undo),
                 onPressed: () => _undo(a),
