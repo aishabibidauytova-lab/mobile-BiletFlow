@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import '../../models/models.dart';
-import '../../services/api_service.dart';
+import '../models/models.dart';
+import '../services/api_service.dart';
 import 'attendee_search_screen.dart';
 
 class ScannerScreen extends StatefulWidget {

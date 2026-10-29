@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../models/models.dart';
-import '../../services/api_service.dart';
-import '../../services/auth_service.dart';
+import '../models/models.dart';
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'scanner_screen.dart';
 

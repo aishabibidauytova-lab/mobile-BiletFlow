@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../models/models.dart';
-import '../../services/auth_service.dart';
+import '../models/models.dart';
+import '../services/auth_service.dart';
 import 'event_selection_screen.dart';
 
 class LoginScreen extends StatefulWidget {
