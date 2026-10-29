@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/models.dart';
 import '../services/auth_service.dart';
-import 'event_selection_screen.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _loading = false;
   bool _hidePass = true;
+  bool _register = false; // false = sign in, true = create account
   String? _error;
 
   @override
@@ -33,16 +34,21 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      await AuthService.login(_email.text.trim(), _password.text);
+      final email = _email.text.trim();
+      if (_register) {
+        await AuthService.register(email, _password.text);
+      } else {
+        await AuthService.login(email, _password.text);
+      }
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const EventSelectionScreen()),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Не удалось войти. Попробуйте ещё раз.');
+      setState(() => _error = 'Не удалось выполнить запрос. Попробуйте ещё раз.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -51,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('BiletFlow Check-In')),
+      appBar: AppBar(title: const Text('BiletFlow')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -65,8 +71,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   Icon(Icons.qr_code_scanner,
                       size: 72, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(height: 8),
-                  const Text('Вход для администраторов событий',
-                      style: TextStyle(fontSize: 16)),
+                  Text(_register ? 'Создание аккаунта' : 'Вход в BiletFlow',
+                      style: const TextStyle(fontSize: 16)),
                   const SizedBox(height: 24),
                   TextFormField(
                     controller: _email,
@@ -114,8 +120,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Войти'),
+                          : Text(_register ? 'Зарегистрироваться' : 'Войти'),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _loading
+                        ? null
+                        : () => setState(() {
+                              _register = !_register;
+                              _error = null;
+                            }),
+                    child: Text(_register
+                        ? 'Уже есть аккаунт? Войти'
+                        : 'Нет аккаунта? Зарегистрироваться'),
                   ),
                 ],
               ),

@@ -20,16 +20,18 @@ flutter pub add mobile_scanner flutter_secure_storage http
 <string>Камера нужна для сканирования QR-кодов билетов</string>
 ```
 
-## 3. Mock vs real backend
-`lib/services/api_service.dart`:
-- `kUseMockApi = true` runs everything in-memory. Login: any email with `@` and password of 4+ chars.
-- Set `kUseMockApi = false` and edit `kBaseUrl` when the backend exists. Align endpoint paths and JSON with the team's API contract.
+## 3. Backend
+The app talks to the live backend: `kBaseUrl` in `lib/services/api_service.dart`
+(`https://biletflow.duckdns.org/api`). API docs: https://biletflow.duckdns.org/swagger-ui/index.html
 
-## 4. Testing the scanner with mock data
-Admission QR payload format: `BF1:<ticketId>`. Generate QR codes (any online generator) for:
-`BF1:T-1001` (valid), `BF1:T-1004` (already used), `BF1:T-1005` (cancelled), `BF1:T-1006` (refunded), `BF1:T-9999` (invalid).
-A QR containing `https://...` is rejected as a Campaign QR / non-ticket.
+## 4. Who sees what
+Every signed-in user gets the attendee tabs: **Афиша** (events, ticket selection, order),
+**Билеты** (tickets with the server-generated QR code) and **Заказы** (orders, demo payment, cancel).
+Users assigned to an event as check-in staff (`POST /api/events/{id}/staff` by the organizer)
+also get the **Проверка** tab: scanner, attendee search, undo check-in.
 
-## 5. Replace your old files
-Replace `main.dart`, `scanner_screen.dart`, `event_selection_screen.dart`. New: `models/`, `services/`, `screens/login_screen.dart`, `screens/attendee_search_screen.dart`.
-(Move the screens into `lib/screens/` and update imports, or keep your original folder layout.)
+## 5. Testing check-in end to end
+1. Register attendee account A and buy/register a ticket in the app.
+2. As the event's organizer, assign account B as staff for that event.
+3. Sign in as B, open **Проверка**, and scan A's ticket QR from another phone or screen.
+   A QR containing `https://...` is rejected as a Campaign QR / non-ticket.

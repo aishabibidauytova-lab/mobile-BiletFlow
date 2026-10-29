@@ -60,17 +60,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
     _dismissTimer?.cancel();
 
     ScanResult result;
-    if (!QrPayload.isAdmissionTicket(raw)) {
-      // Campaign QR codes (https links) and random QR codes never grant entry.
-      result = ScanResult(
+    if (QrPayload.looksLikeLink(raw)) {
+      // Campaign QR codes (https links) never grant entry; the server also
+      // rejects anything that is not a valid ticket code.
+      result = const ScanResult(
         ScanOutcome.notTicket,
-        message: QrPayload.looksLikeLink(raw)
-            ? 'Это рекламный QR-код, а не билет.'
-            : 'Этот QR-код не является билетом BiletFlow.',
+        message: 'Это рекламный QR-код, а не билет.',
       );
     } else {
       try {
-        result = await api.checkInByQr(widget.event.id, raw);
+        result = await api.checkIn(widget.event.id, raw);
       } on ApiException catch (e) {
         result = ScanResult(ScanOutcome.error, message: e.message);
       } catch (_) {
@@ -98,12 +97,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   Future<void> _undo() async {
-    final a = _result?.attendee;
-    if (a == null) return;
+    final t = _result?.ticket;
+    if (t == null) return;
     _dismissTimer?.cancel();
     setState(() => _undoing = true);
     try {
-      await api.undoCheckIn(widget.event.id, a.ticketId);
+      await api.undoCheckIn(widget.event.id, t.id);
       await _refreshStats();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -237,7 +236,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
               bottom: 0,
               child: _ResultPanel(
                 result: _result!,
-                canUndo: widget.event.canUndo,
                 undoing: _undoing,
                 onUndo: _undo,
                 onClose: _dismiss,
@@ -289,9 +287,6 @@ class _OutcomeStyle {
       case ScanOutcome.cancelled:
         return const _OutcomeStyle(
             Color(0xFFC62828), Icons.cancel, 'БИЛЕТ ОТМЕНЁН');
-      case ScanOutcome.refunded:
-        return const _OutcomeStyle(
-            Color(0xFFC62828), Icons.money_off, 'БИЛЕТ ВОЗВРАЩЁН');
       case ScanOutcome.wrongEvent:
         return const _OutcomeStyle(
             Color(0xFFC62828), Icons.event_busy, 'БИЛЕТ НА ДРУГОЕ СОБЫТИЕ');
@@ -310,14 +305,12 @@ class _OutcomeStyle {
 
 class _ResultPanel extends StatelessWidget {
   final ScanResult result;
-  final bool canUndo;
   final bool undoing;
   final VoidCallback onUndo;
   final VoidCallback onClose;
 
   const _ResultPanel({
     required this.result,
-    required this.canUndo,
     required this.undoing,
     required this.onUndo,
     required this.onClose,
@@ -326,14 +319,13 @@ class _ResultPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _OutcomeStyle.of(result.outcome);
-    final a = result.attendee;
+    final t = result.ticket;
     final isSuccess = result.outcome == ScanOutcome.success;
 
     String? usedAt;
-    if (result.outcome == ScanOutcome.alreadyUsed && a?.checkedInAt != null) {
-      final t = a!.checkedInAt!.toLocal();
-      usedAt =
-          'Чек-ин: ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    final usedTime = result.checkedInAt ?? t?.usedAt;
+    if (result.outcome == ScanOutcome.alreadyUsed && usedTime != null) {
+      usedAt = 'Чек-ин: ${formatTime(usedTime)}';
     }
 
     return Material(
@@ -365,16 +357,12 @@ class _ResultPanel extends StatelessWidget {
                   ),
                 ],
               ),
-              if (a != null) ...[
+              if (t != null) ...[
                 const SizedBox(height: 8),
-                Text(a.name,
+                Text(t.attendeeEmail,
                     style: const TextStyle(color: Colors.white, fontSize: 18)),
                 Text(
-                  [
-                    a.ticketType,
-                    if (a.seat != null) a.seat!,
-                    a.ticketId,
-                  ].join(' • '),
+                  [t.ticketTypeName, t.code].join(' • '),
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],
@@ -385,7 +373,7 @@ class _ResultPanel extends StatelessWidget {
                 Text(result.message!,
                     style: const TextStyle(color: Colors.white)),
               ],
-              if (isSuccess && canUndo) ...[
+              if (isSuccess && t != null) ...[
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: undoing ? null : onUndo,

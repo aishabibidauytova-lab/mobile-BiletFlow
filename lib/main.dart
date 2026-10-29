@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 
-import 'screens/event_selection_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/api_service.dart';
 import 'services/auth_service.dart';
+
+final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  api.onUnauthorized = () async {
+    await AuthService.logout();
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  };
   runApp(const BiletFlowApp());
 }
 
@@ -14,7 +24,8 @@ class BiletFlowApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BiletFlow Check-In',
+      navigatorKey: navigatorKey,
+      title: 'BiletFlow',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -25,7 +36,7 @@ class BiletFlowApp extends StatelessWidget {
   }
 }
 
-/// Shows the login screen or the event list depending on a saved session.
+/// Shows the login screen or the home screen depending on a saved session.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -37,9 +48,7 @@ class AuthGate extends StatelessWidget {
         if (snap.connectionState != ConnectionState.done) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        return snap.data == true
-            ? const EventSelectionScreen()
-            : const LoginScreen();
+        return snap.data == true ? const HomeScreen() : const LoginScreen();
       },
     );
   }
