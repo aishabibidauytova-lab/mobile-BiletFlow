@@ -164,7 +164,7 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
                 ? const Center(child: Text('Ничего не найдено'))
                 : ListView.separated(
                     itemCount: _items.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, i) {
                       final a = _items[i];
                       final (label, color) = _statusLabel(a.status);

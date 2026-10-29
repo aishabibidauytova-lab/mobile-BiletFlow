@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'event_selection_screen.dart';
 
 import 'screens/event_selection_screen.dart';
 import 'screens/login_screen.dart';
@@ -15,11 +14,6 @@ class BiletFlowApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-<<<<<<< HEAD
-      title: 'BiletFlow Admin',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const LoginScreen(),
-=======
       title: 'BiletFlow Check-In',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -27,7 +21,6 @@ class BiletFlowApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
       home: const AuthGate(),
->>>>>>> a4b8aa6 (Fix build and update configuration)
     );
   }
 }
@@ -38,44 +31,6 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
-    return Scaffold(
-      appBar: AppBar(title: const Text('BiletFlow Check-In')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Пароль',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const EventSelectionScreen(),
-                  ),
-                );
-              },
-              child: const Text('Войти'),
-            ),
-          ],
-        ),
-      ),
-=======
     return FutureBuilder<bool>(
       future: AuthService.restore(),
       builder: (context, snap) {
@@ -86,7 +41,6 @@ class AuthGate extends StatelessWidget {
             ? const EventSelectionScreen()
             : const LoginScreen();
       },
->>>>>>> a4b8aa6 (Fix build and update configuration)
     );
   }
 }
