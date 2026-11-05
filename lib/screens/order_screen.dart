@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import 'ticket_screen.dart';
@@ -7,13 +8,13 @@ import 'ticket_screen.dart';
 (String, Color) orderStatusLabel(OrderStatus s) {
   switch (s) {
     case OrderStatus.pending:
-      return ('Ожидает оплаты', Colors.orange.shade800);
+      return (tr('order.pending'), Colors.orange.shade800);
     case OrderStatus.paid:
-      return ('Оплачен', Colors.green.shade700);
+      return (tr('order.paid'), Colors.green.shade700);
     case OrderStatus.cancelled:
-      return ('Отменён', Colors.red.shade700);
+      return (tr('order.cancelled'), Colors.red.shade700);
     case OrderStatus.expired:
-      return ('Истёк', Colors.blueGrey);
+      return (tr('order.expired'), Colors.blueGrey);
   }
 }
 
@@ -77,103 +78,219 @@ class _OrderScreenState extends State<OrderScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Отменить заказ?'),
-        content: const Text('Билеты из этого заказа станут недействительными.'),
+        title: Text(tr('order.cancelTitle')),
+        content: Text(tr('order.cancelBody')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Нет')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('no'))),
           FilledButton(
-              onPressed: () => Navigator.pop(c, true), child: const Text('Отменить заказ')),
+              onPressed: () => Navigator.pop(c, true), child: Text(tr('order.cancel'))),
         ],
       ),
     );
-    if (ok == true) _run(() => api.cancelOrder(_order.id), 'Заказ отменён');
+    if (ok == true) _run(() => api.cancelOrder(_order.id), tr('order.cancelled.toast'));
   }
 
   @override
   Widget build(BuildContext context) {
     final o = _order;
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final (label, color) = orderStatusLabel(o.status);
     final free = o.totalAmount == 0;
+    final border = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(20),
+      side: BorderSide(color: cs.outlineVariant),
+    );
 
     return Scaffold(
-      appBar: AppBar(title: Text('Заказ №${o.id}')),
+      appBar: AppBar(title: Text(tr('orders.number', {'id': o.id}))),
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(o.eventTitle, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-            if (o.status == OrderStatus.pending && o.expiresAt != null)
-              Text('Билеты забронированы до ${formatDateTime(o.expiresAt!)}',
-                  style: theme.textTheme.bodySmall),
-            const Divider(height: 32),
-            for (final i in o.items)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('${i.ticketTypeName} × ${i.quantity}')),
-                    Text(i.unitPrice == 0
-                        ? 'Бесплатно'
-                        : formatPrice(i.unitPrice * i.quantity)),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 6),
-            Row(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
-                Expanded(child: Text('Итого', style: theme.textTheme.titleMedium)),
-                Text(free ? '0 ₸' : formatPrice(o.totalAmount),
-                    style: theme.textTheme.titleMedium),
+                // Status banner.
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          switch (o.status) {
+                            OrderStatus.pending => Icons.hourglass_top,
+                            OrderStatus.paid => Icons.check_circle,
+                            OrderStatus.cancelled => Icons.cancel,
+                            OrderStatus.expired => Icons.timer_off,
+                          },
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                    color: color, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 2),
+                            Text(o.eventTitle,
+                                style: theme.textTheme.titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w800)),
+                            if (o.status == OrderStatus.pending && o.expiresAt != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                    tr('order.reservedUntil', {'date': formatDateTime(o.expiresAt!)}),
+                                    style: theme.textTheme.bodySmall),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                // Receipt.
+                Card(
+                  margin: EdgeInsets.zero,
+                  shape: border,
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(tr('order.items'),
+                            style: theme.textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 12),
+                        for (final i in o.items)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text('${i.ticketTypeName} × ${i.quantity}'),
+                                ),
+                                Text(
+                                  i.unitPrice == 0
+                                      ? tr('free')
+                                      : formatPrice(i.unitPrice * i.quantity),
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const Divider(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(tr('order.total'),
+                                  style: theme.textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800)),
+                            ),
+                            Text(free ? '0 ₸' : formatPrice(o.totalAmount),
+                                style: theme.textTheme.titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w800)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (o.status == OrderStatus.pending) ...[
+                  const SizedBox(height: 14),
+                  if (!free)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        border: Border.all(color: Colors.amber.shade700),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.science_outlined, color: Colors.amber.shade900),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(tr('order.demo')),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => api.payOrder(o.id),
+                            free ? tr('order.confirmedToast') : tr('order.paidToast')),
+                    child: Text(free ? tr('order.confirm') : tr('order.pay')),
+                  ),
+                ],
+                if (o.status == OrderStatus.pending || o.status == OrderStatus.paid)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: TextButton(
+                      style: TextButton.styleFrom(foregroundColor: cs.error),
+                      onPressed: _busy ? null : _cancel,
+                      child: Text(tr('order.cancel')),
+                    ),
+                  ),
+                if (_tickets.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Text(tr('order.yourTickets'),
+                      style: theme.textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 10),
+                  for (final t in _tickets)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      shape: border,
+                      clipBehavior: Clip.antiAlias,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.fromLTRB(14, 6, 12, 6),
+                        leading: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.qr_code_2, color: cs.onPrimaryContainer),
+                        ),
+                        title: Text(t.ticketTypeName,
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text(t.code,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontFamily: 'monospace')),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => TicketScreen(ticket: t))),
+                      ),
+                    ),
+                ],
               ],
             ),
-            if (o.status == OrderStatus.pending) ...[
-              const SizedBox(height: 24),
-              if (!free)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    border: Border.all(color: Colors.amber.shade700),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'ДЕМО-ОПЛАТА: это симуляция для учебного проекта. '
-                    'Реальные деньги не списываются.',
-                  ),
-                ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _busy
-                    ? null
-                    : () => _run(() => api.payOrder(o.id),
-                        free ? 'Регистрация подтверждена' : 'Оплата прошла (демо)'),
-                child: Text(free ? 'Подтвердить регистрацию' : 'Оплатить (демо)'),
-              ),
-            ],
-            if (o.status == OrderStatus.pending || o.status == OrderStatus.paid)
-              TextButton(
-                onPressed: _busy ? null : _cancel,
-                child: const Text('Отменить заказ'),
-              ),
-            if (_tickets.isNotEmpty) ...[
-              const Divider(height: 32),
-              Text('Билеты', style: theme.textTheme.titleMedium),
-              for (final t in _tickets)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.qr_code_2),
-                  title: Text(t.ticketTypeName),
-                  subtitle: Text(t.code),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => TicketScreen(ticket: t))),
-                ),
-            ],
-          ],
+          ),
         ),
       ),
     );

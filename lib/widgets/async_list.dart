@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 
 /// Loads a list with [load] and shows loading / error+retry / empty / items,
@@ -46,8 +47,8 @@ class AsyncListState<T> extends State<AsyncList<T>> {
           final err = snap.error;
           return _Message(
             icon: Icons.wifi_off,
-            text: err is ApiException ? err.message : 'Не удалось загрузить данные',
-            action: OutlinedButton(onPressed: reload, child: const Text('Повторить')),
+            text: err is ApiException ? err.message : tr('err.load'),
+            action: OutlinedButton(onPressed: reload, child: Text(tr('retry'))),
           );
         }
         final items = snap.data ?? [];
@@ -58,11 +59,16 @@ class AsyncListState<T> extends State<AsyncList<T>> {
                   const SizedBox(height: 120),
                   _Message(icon: Icons.inbox_outlined, text: widget.emptyText),
                 ])
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: items.length,
-                  itemBuilder: (c, i) => widget.itemBuilder(c, items[i]),
-                ),
+              : LayoutBuilder(builder: (context, box) {
+                  // Keep rows readable on wide (web/desktop) windows.
+                  final side = box.maxWidth > 760 ? (box.maxWidth - 720) / 2 : 0.0;
+                  return ListView.separated(
+                    padding: EdgeInsets.fromLTRB(16 + side, 8, 16 + side, 24),
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (c, i) => widget.itemBuilder(c, items[i]),
+                  );
+                }),
         );
       },
     );
@@ -103,14 +109,25 @@ class StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        border: Border.all(color: color),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(label,
-          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ),
     );
   }
 }

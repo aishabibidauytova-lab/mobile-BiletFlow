@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import 'attendee_search_screen.dart';
@@ -63,9 +64,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     if (QrPayload.looksLikeLink(raw)) {
       // Campaign QR codes (https links) never grant entry; the server also
       // rejects anything that is not a valid ticket code.
-      result = const ScanResult(
+      result = ScanResult(
         ScanOutcome.notTicket,
-        message: 'Это рекламный QR-код, а не билет.',
+        message: tr('scan.promoQr'),
       );
     } else {
       try {
@@ -73,8 +74,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       } on ApiException catch (e) {
         result = ScanResult(ScanOutcome.error, message: e.message);
       } catch (_) {
-        result = const ScanResult(ScanOutcome.error,
-            message: 'Ошибка проверки. Попробуйте ещё раз.');
+        result = ScanResult(ScanOutcome.error, message: tr('scan.failed'));
       }
     }
 
@@ -106,7 +106,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       await _refreshStats();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Чек-ин отменён')),
+        SnackBar(content: Text(tr('scan.undone'))),
       );
     } on ApiException catch (e) {
       if (mounted) {
@@ -145,7 +145,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         title: Text(widget.event.title, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            tooltip: 'Поиск участника',
+            tooltip: tr('scan.search'),
             icon: const Icon(Icons.search),
             onPressed: _openSearch,
           ),
@@ -174,8 +174,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Нет доступа к камере.\nРазрешите доступ в настройках телефона '
-                  'или воспользуйтесь поиском участника.',
+                  tr('scan.noCamera'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
@@ -197,9 +196,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Наведите камеру на QR-код билета',
-                    style: TextStyle(
+                  Text(
+                    tr('scan.hint'),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       shadows: [Shadow(blurRadius: 4, color: Colors.black)],
@@ -217,13 +216,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
               children: [
                 _RoundButton(
                   icon: Icons.flash_on,
-                  tooltip: 'Фонарик',
+                  tooltip: tr('scan.torch'),
                   onTap: () => _controller.toggleTorch(),
                 ),
                 const SizedBox(height: 8),
                 _RoundButton(
                   icon: Icons.cameraswitch,
-                  tooltip: 'Сменить камеру',
+                  tooltip: tr('scan.switchCamera'),
                   onTap: () => _controller.switchCamera(),
                 ),
               ],
@@ -279,26 +278,26 @@ class _OutcomeStyle {
   static _OutcomeStyle of(ScanOutcome o) {
     switch (o) {
       case ScanOutcome.success:
-        return const _OutcomeStyle(
-            Color(0xFF2E7D32), Icons.check_circle, 'БИЛЕТ ДЕЙСТВИТЕЛЕН');
+        return _OutcomeStyle(
+            const Color(0xFF2E7D32), Icons.check_circle, tr('scan.out.success'));
       case ScanOutcome.alreadyUsed:
-        return const _OutcomeStyle(
-            Color(0xFFEF6C00), Icons.warning_amber_rounded, 'УЖЕ ИСПОЛЬЗОВАН');
+        return _OutcomeStyle(const Color(0xFFEF6C00),
+            Icons.warning_amber_rounded, tr('scan.out.used'));
       case ScanOutcome.cancelled:
-        return const _OutcomeStyle(
-            Color(0xFFC62828), Icons.cancel, 'БИЛЕТ ОТМЕНЁН');
+        return _OutcomeStyle(
+            const Color(0xFFC62828), Icons.cancel, tr('scan.out.cancelled'));
       case ScanOutcome.wrongEvent:
-        return const _OutcomeStyle(
-            Color(0xFFC62828), Icons.event_busy, 'БИЛЕТ НА ДРУГОЕ СОБЫТИЕ');
+        return _OutcomeStyle(
+            const Color(0xFFC62828), Icons.event_busy, tr('scan.out.wrongEvent'));
       case ScanOutcome.notTicket:
-        return const _OutcomeStyle(
-            Color(0xFF6A1B9A), Icons.qr_code_2, 'ЭТО НЕ БИЛЕТ');
+        return _OutcomeStyle(
+            const Color(0xFF6A1B9A), Icons.qr_code_2, tr('scan.out.notTicket'));
       case ScanOutcome.invalid:
-        return const _OutcomeStyle(
-            Color(0xFFC62828), Icons.block, 'НЕДЕЙСТВИТЕЛЬНЫЙ БИЛЕТ');
+        return _OutcomeStyle(
+            const Color(0xFFC62828), Icons.block, tr('scan.out.invalid'));
       case ScanOutcome.error:
-        return const _OutcomeStyle(
-            Color(0xFF455A64), Icons.error_outline, 'ОШИБКА ПРОВЕРКИ');
+        return _OutcomeStyle(
+            const Color(0xFF455A64), Icons.error_outline, tr('scan.out.error'));
     }
   }
 }
@@ -325,7 +324,7 @@ class _ResultPanel extends StatelessWidget {
     String? usedAt;
     final usedTime = result.checkedInAt ?? t?.usedAt;
     if (result.outcome == ScanOutcome.alreadyUsed && usedTime != null) {
-      usedAt = 'Чек-ин: ${formatTime(usedTime)}';
+      usedAt = tr('scan.checkedInAt', {'time': formatTime(usedTime)});
     }
 
     return Material(
@@ -385,7 +384,7 @@ class _ResultPanel extends StatelessWidget {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.undo),
-                  label: const Text('Отменить чек-ин'),
+                  label: Text(tr('scan.undo')),
                 ),
               ],
             ],

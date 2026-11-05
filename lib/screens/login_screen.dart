@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/auth_service.dart';
+import '../widgets/language_menu.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -48,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Не удалось выполнить запрос. Попробуйте ещё раз.');
+      setState(() => _error = tr('login.requestFailed'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -57,7 +59,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('BiletFlow')),
+      appBar: AppBar(
+        title: const Text('BiletFlow'),
+        actions: const [LanguageMenu(), SizedBox(width: 6)],
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -71,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Icon(Icons.qr_code_scanner,
                       size: 72, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(height: 8),
-                  Text(_register ? 'Создание аккаунта' : 'Вход в BiletFlow',
+                  Text(_register ? tr('login.createTitle') : tr('login.title'),
                       style: const TextStyle(fontSize: 16)),
                   const SizedBox(height: 24),
                   TextFormField(
@@ -81,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: const InputDecoration(
                         labelText: 'Email', border: OutlineInputBorder()),
                     validator: (v) => (v == null || !v.contains('@'))
-                        ? 'Введите корректный email'
+                        ? tr('login.emailInvalid')
                         : null,
                   ),
                   const SizedBox(height: 16),
@@ -91,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     autofillHints: const [AutofillHints.password],
                     onFieldSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
-                      labelText: 'Пароль',
+                      labelText: tr('login.password'),
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: Icon(_hidePass
@@ -101,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Введите пароль' : null,
+                        (v == null || v.isEmpty) ? tr('login.passwordEmpty') : null,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
@@ -120,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(_register ? 'Зарегистрироваться' : 'Войти'),
+                          : Text(_register ? tr('login.register') : tr('login.signIn')),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -132,8 +137,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               _error = null;
                             }),
                     child: Text(_register
-                        ? 'Уже есть аккаунт? Войти'
-                        : 'Нет аккаунта? Зарегистрироваться'),
+                        ? tr('login.haveAccount')
+                        : tr('login.noAccount')),
                   ),
                 ],
               ),

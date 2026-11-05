@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/async_list.dart';
@@ -13,8 +14,7 @@ class EventSelectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AsyncList<EventInfo>(
       load: api.getAssignedEvents,
-      emptyText: 'Вам пока не назначено ни одного мероприятия.\n'
-          'Обратитесь к организатору.',
+      emptyText: tr('checkin.noEvents'),
       itemBuilder: (context, e) => Card(
         child: ListTile(
           leading: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),

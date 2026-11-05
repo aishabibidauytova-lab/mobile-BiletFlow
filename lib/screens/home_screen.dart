@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../widgets/language_menu.dart';
 import 'event_selection_screen.dart';
 import 'events_screen.dart';
 import 'login_screen.dart';
@@ -55,13 +57,19 @@ class _HomeScreenState extends State<HomeScreen> {
       const MyOrdersScreen(),
       if (_isStaff) const EventSelectionScreen(),
     ];
-    const titles = ['Афиша', 'Мои билеты', 'Заказы', 'Проверка билетов'];
+    final titles = [
+      tr('nav.events'),
+      tr('title.tickets'),
+      tr('nav.orders'),
+      tr('title.checkin'),
+    ];
     final index = _index < pages.length ? _index : 0;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(titles[index]),
         actions: [
+          const LanguageMenu(),
           PopupMenuButton<void>(
             icon: const Icon(Icons.account_circle),
             itemBuilder: (_) => [
@@ -69,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 enabled: false,
                 child: Text(AuthService.user?.email ?? ''),
               ),
-              PopupMenuItem(onTap: _logout, child: const Text('Выйти')),
+              PopupMenuItem(onTap: _logout, child: Text(tr('menu.logout'))),
             ],
           ),
         ],
@@ -88,15 +96,17 @@ class _HomeScreenState extends State<HomeScreen> {
           _index = i;
         }),
         destinations: [
-          const NavigationDestination(
-              icon: Icon(Icons.event), label: 'Афиша'),
-          const NavigationDestination(
-              icon: Icon(Icons.confirmation_number), label: 'Билеты'),
-          const NavigationDestination(
-              icon: Icon(Icons.receipt_long), label: 'Заказы'),
+          NavigationDestination(
+              icon: const Icon(Icons.event), label: tr('nav.events')),
+          NavigationDestination(
+              icon: const Icon(Icons.confirmation_number),
+              label: tr('nav.tickets')),
+          NavigationDestination(
+              icon: const Icon(Icons.receipt_long), label: tr('nav.orders')),
           if (_isStaff)
-            const NavigationDestination(
-                icon: Icon(Icons.qr_code_scanner), label: 'Проверка'),
+            NavigationDestination(
+                icon: const Icon(Icons.qr_code_scanner),
+                label: tr('nav.checkin')),
         ],
       ),
     );
