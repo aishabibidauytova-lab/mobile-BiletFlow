@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../l10n/l10n.dart';
 import '../models/models.dart';
@@ -73,6 +74,12 @@ class BiletFlowApi {
 
   Future<dynamic> _get(String path, [Map<String, String>? q]) =>
       _send(() => _client.get(_uri(path, q), headers: _headers));
+
+  Future<dynamic> _put(String path, Object body) => _send(
+      () => _client.put(_uri(path), headers: _headers, body: jsonEncode(body)));
+
+  Future<dynamic> _delete(String path) =>
+      _send(() => _client.delete(_uri(path), headers: _headers));
 
   Future<dynamic> _post(String path, [Object? body]) => _send(() => _client.post(
       _uri(path),
@@ -166,4 +173,136 @@ class BiletFlowApi {
 
   Future<Ticket> undoCheckIn(int eventId, int ticketId) async => Ticket.fromJson(
       await _post('/check-in/events/$eventId/tickets/$ticketId/undo'));
+
+  // --- Account ----------------------------------------------------------------
+
+  /// Updates the signed-in user's email and/or password (null = unchanged).
+  Future<AppUser> updateCredentials({String? email, String? password}) async =>
+      AppUser.fromJson(await _put('/users/me/credentials', {
+        'email': ?email,
+        'password': ?password,
+      }));
+
+  Future<void> deleteMyAccount() async => _delete('/users/me');
+
+  // --- Organizer profile -----------------------------------------------------
+
+  Future<OrganizerProfile> getOrganizerProfile() async =>
+      OrganizerProfile.fromJson(await _get('/organizers/profile'));
+
+  /// Turns an attendee into an organizer. Returns the new token (role changed).
+  Future<String> becomeOrganizer(String contactInformation) async {
+    final b = await _post(
+        '/organizers/profile', {'contactInformation': contactInformation});
+    return b['accessToken'] as String;
+  }
+
+  // --- Organizer: events -----------------------------------------------------
+
+  Future<List<EventInfo>> getMyEvents(int organizerId) async {
+    final b = await _get('/events/organizer/$organizerId',
+        {..._pageAll, 'sort': 'startTime,desc'});
+    return PageResult.fromJson(b, EventInfo.fromJson).items;
+  }
+
+  Future<EventInfo> createEvent(Map<String, dynamic> body) async =>
+      EventInfo.fromJson(await _post('/events', body));
+
+  Future<EventInfo> updateEvent(int id, Map<String, dynamic> body) async =>
+      EventInfo.fromJson(await _put('/events/$id', body));
+
+  Future<EventInfo> publishEvent(int id) async =>
+      EventInfo.fromJson(await _post('/events/$id/publish'));
+
+  Future<EventInfo> unpublishEvent(int id) async =>
+      EventInfo.fromJson(await _post('/events/$id/unpublish'));
+
+  Future<EventInfo> cancelEvent(int id) async =>
+      EventInfo.fromJson(await _post('/events/$id/cancel'));
+
+  Future<EventInfo> duplicateEvent(int id) async =>
+      EventInfo.fromJson(await _post('/events/$id/duplicate'));
+
+  /// Uploads a poster (JPEG/PNG/WebP, up to 5 MB).
+  Future<EventInfo> uploadPoster(
+      int eventId, List<int> bytes, String filename, String mime) async {
+    try {
+      final req = http.MultipartRequest('POST', _uri('/events/$eventId/poster'))
+        ..headers.addAll(authHeaders)
+        ..files.add(http.MultipartFile.fromBytes('file', bytes,
+            filename: filename, contentType: MediaType.parse(mime)));
+      final streamed = await _client.send(req).timeout(const Duration(seconds: 60));
+      final res = await http.Response.fromStream(streamed);
+      final body = res.body.isEmpty ? null : _tryJson(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 413) throw ApiException(tr('poster.tooBig'));
+      if (res.statusCode >= 400) {
+        throw ApiException(
+            _message(body) ?? tr('api.server', {'code': res.statusCode}));
+      }
+      return EventInfo.fromJson(body as Map<String, dynamic>);
+    } on TimeoutException {
+      throw ApiException(tr('api.timeout'));
+    } on http.ClientException {
+      throw ApiException(tr('api.noConnection'));
+    }
+  }
+
+  Future<void> deletePoster(int eventId) async => _delete('/events/$eventId/poster');
+
+  // --- Organizer: venues, ticket types, staff --------------------------------
+
+  Future<List<Venue>> getVenues() async {
+    final b = await _get('/venues', _pageAll);
+    return PageResult.fromJson(b, Venue.fromJson).items;
+  }
+
+  Future<Venue> createVenue(String name, String address, int capacity) async =>
+      Venue.fromJson(await _post('/venues',
+          {'name': name, 'address': address, 'capacity': capacity}));
+
+  /// All ticket types of an event, including hidden ones (owner view).
+  Future<List<TicketType>> getAllTicketTypes(int eventId) async {
+    final b = await _get('/events/$eventId/ticket-types') as List;
+    return b.map((e) => TicketType.fromJson(e)).toList();
+  }
+
+  Future<TicketType> createTicketType(int eventId, Map<String, dynamic> body) async =>
+      TicketType.fromJson(await _post('/events/$eventId/ticket-types', body));
+
+  Future<TicketType> updateTicketType(int id, Map<String, dynamic> body) async =>
+      TicketType.fromJson(await _put('/ticket-types/$id', body));
+
+  Future<TicketType> hideTicketType(int id) async =>
+      TicketType.fromJson(await _post('/ticket-types/$id/hide'));
+
+  Future<TicketType> unhideTicketType(int id) async =>
+      TicketType.fromJson(await _post('/ticket-types/$id/unhide'));
+
+  Future<List<StaffMember>> getStaff(int eventId) async {
+    final b = await _get('/events/$eventId/staff', _pageAll);
+    final list = b is Map ? (b['content'] as List? ?? []) : (b as List);
+    return list.map((e) => StaffMember.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<StaffMember> assignStaff(int eventId, String email) async =>
+      StaffMember.fromJson(await _post('/events/$eventId/staff', {'email': email}));
+
+  Future<void> removeStaff(int eventId, int userId) async =>
+      _delete('/events/$eventId/staff/$userId');
+
+  // --- Platform admin ----------------------------------------------------------
+
+  Future<List<UserAccount>> getUsers() async {
+    final b = await _get('/users', {..._pageAll, 'sort': 'createdAt,desc'});
+    return PageResult.fromJson(b, UserAccount.fromJson).items;
+  }
+
+  /// Admin: change another user's email and/or password (null = unchanged).
+  Future<UserAccount> updateUser(int id, {String? email, String? password}) async =>
+      UserAccount.fromJson(await _put('/users/$id', {
+        'email': ?email,
+        'password': ?password,
+      }));
+
+  Future<void> deleteUser(int id) async => _delete('/users/$id');
 }

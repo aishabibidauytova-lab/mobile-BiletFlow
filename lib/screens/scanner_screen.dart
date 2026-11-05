@@ -269,34 +269,34 @@ class _RoundButton extends StatelessWidget {
 
 /// Visual description for every scan outcome (colour + icon + text, so the
 /// result is never conveyed by colour alone).
-class _OutcomeStyle {
+class OutcomeStyle {
   final Color color;
   final IconData icon;
   final String title;
-  const _OutcomeStyle(this.color, this.icon, this.title);
+  const OutcomeStyle(this.color, this.icon, this.title);
 
-  static _OutcomeStyle of(ScanOutcome o) {
+  static OutcomeStyle of(ScanOutcome o) {
     switch (o) {
       case ScanOutcome.success:
-        return _OutcomeStyle(
+        return OutcomeStyle(
             const Color(0xFF2E7D32), Icons.check_circle, tr('scan.out.success'));
       case ScanOutcome.alreadyUsed:
-        return _OutcomeStyle(const Color(0xFFEF6C00),
+        return OutcomeStyle(const Color(0xFFEF6C00),
             Icons.warning_amber_rounded, tr('scan.out.used'));
       case ScanOutcome.cancelled:
-        return _OutcomeStyle(
+        return OutcomeStyle(
             const Color(0xFFC62828), Icons.cancel, tr('scan.out.cancelled'));
       case ScanOutcome.wrongEvent:
-        return _OutcomeStyle(
+        return OutcomeStyle(
             const Color(0xFFC62828), Icons.event_busy, tr('scan.out.wrongEvent'));
       case ScanOutcome.notTicket:
-        return _OutcomeStyle(
+        return OutcomeStyle(
             const Color(0xFF6A1B9A), Icons.qr_code_2, tr('scan.out.notTicket'));
       case ScanOutcome.invalid:
-        return _OutcomeStyle(
+        return OutcomeStyle(
             const Color(0xFFC62828), Icons.block, tr('scan.out.invalid'));
       case ScanOutcome.error:
-        return _OutcomeStyle(
+        return OutcomeStyle(
             const Color(0xFF455A64), Icons.error_outline, tr('scan.out.error'));
     }
   }
@@ -317,7 +317,7 @@ class _ResultPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _OutcomeStyle.of(result.outcome);
+    final style = OutcomeStyle.of(result.outcome);
     final t = result.ticket;
     final isSuccess = result.outcome == ScanOutcome.success;
 
