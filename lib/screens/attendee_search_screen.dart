@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
@@ -64,13 +65,13 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
       final r = await api.checkIn(widget.event.id, a.code);
       switch (r.outcome) {
         case ScanOutcome.success:
-          _toast('Чек-ин выполнен: ${a.attendeeEmail}');
+          _toast(tr('att.checkedIn', {'email': a.attendeeEmail}));
         case ScanOutcome.alreadyUsed:
-          _toast('Билет уже использован');
+          _toast(tr('att.alreadyUsed'));
         case ScanOutcome.cancelled:
-          _toast('Билет отменён');
+          _toast(tr('att.cancelled'));
         default:
-          _toast(r.message ?? 'Не удалось выполнить чек-ин');
+          _toast(r.message ?? tr('att.failed'));
       }
       await _search(_controller.text);
     } on ApiException catch (e) {
@@ -84,15 +85,15 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Отменить чек-ин?'),
-        content: Text('${a.attendeeEmail} (${a.code}) снова станет «не прибыл».'),
+        title: Text(tr('att.undoTitle')),
+        content: Text(tr('att.undoBody', {'email': a.attendeeEmail, 'code': a.code})),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c, false),
-              child: const Text('Нет')),
+              child: Text(tr('no'))),
           FilledButton(
               onPressed: () => Navigator.pop(c, true),
-              child: const Text('Отменить чек-ин')),
+              child: Text(tr('scan.undo'))),
         ],
       ),
     );
@@ -100,7 +101,7 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
     setState(() => _working.add(a.id));
     try {
       await api.undoCheckIn(widget.event.id, a.id);
-      _toast('Чек-ин отменён');
+      _toast(tr('scan.undone'));
       await _search(_controller.text);
     } on ApiException catch (e) {
       _toast(e.message);
@@ -112,18 +113,18 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
   (String, Color) _statusLabel(TicketStatus s) {
     switch (s) {
       case TicketStatus.valid:
-        return ('Не прибыл', Colors.blueGrey);
+        return (tr('att.notArrived'), Colors.blueGrey);
       case TicketStatus.used:
-        return ('Прибыл', Colors.green.shade700);
+        return (tr('att.arrived'), Colors.green.shade700);
       case TicketStatus.cancelled:
-        return ('Отменён', Colors.red.shade700);
+        return (tr('ticket.cancelled'), Colors.red.shade700);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Поиск участника')),
+      appBar: AppBar(title: Text(tr('scan.search'))),
       body: Column(
         children: [
           Padding(
@@ -133,7 +134,7 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
               onChanged: _onChanged,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Email или код билета',
+                hintText: tr('att.hint'),
                 prefixIcon: const Icon(Icons.search),
                 border: const OutlineInputBorder(),
                 suffixIcon: _controller.text.isEmpty
@@ -157,7 +158,7 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
             ),
           Expanded(
             child: !_loading && _items.isEmpty && _error == null
-                ? const Center(child: Text('Ничего не найдено'))
+                ? Center(child: Text(tr('att.none')))
                 : ListView.separated(
                     itemCount: _items.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
@@ -188,14 +189,14 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
     switch (a.status) {
       case TicketStatus.valid:
         return FilledButton(
-            onPressed: () => _checkIn(a), child: const Text('Чек-ин'));
+            onPressed: () => _checkIn(a), child: Text(tr('att.checkIn')));
       case TicketStatus.used:
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(label, style: TextStyle(color: color)),
             IconButton(
-                tooltip: 'Отменить чек-ин',
+                tooltip: tr('scan.undo'),
                 icon: const Icon(Icons.undo),
                 onPressed: () => _undo(a),
               ),

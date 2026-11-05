@@ -1,5 +1,7 @@
 // Models mirror the backend DTOs (see /v3/api-docs on the server).
 
+import '../l10n/l10n.dart';
+
 DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse(v as String);
 
 num _num(dynamic v) => v is num ? v : num.tryParse('$v') ?? 0;
@@ -52,6 +54,7 @@ class EventInfo {
   final DateTime? registrationClosingTime;
   final String status; // DRAFT, PUBLISHED, CANCELLED
   final Venue? venue;
+  final String? posterUrl;
 
   const EventInfo({
     required this.id,
@@ -63,6 +66,7 @@ class EventInfo {
     this.registrationClosingTime,
     this.status = 'PUBLISHED',
     this.venue,
+    this.posterUrl,
   });
 
   bool get isCancelled => status == 'CANCELLED';
@@ -82,6 +86,7 @@ class EventInfo {
         endTime: _date(j['endTime']),
         registrationClosingTime: _date(j['registrationClosingTime']),
         status: (j['status'] ?? 'PUBLISHED') as String,
+        posterUrl: j['posterUrl'] as String?,
         venue: j['venue'] != null
             ? Venue.fromJson(j['venue'] as Map<String, dynamic>)
             : null,
@@ -295,7 +300,7 @@ String formatTime(DateTime d) => '${_two(d.hour)}:${_two(d.minute)}';
 
 /// "1 500 ₸", or "Бесплатно" for zero.
 String formatPrice(num p) {
-  if (p == 0) return 'Бесплатно';
+  if (p == 0) return tr('free');
   final s = p.round().toString();
   final b = StringBuffer();
   for (var i = 0; i < s.length; i++) {

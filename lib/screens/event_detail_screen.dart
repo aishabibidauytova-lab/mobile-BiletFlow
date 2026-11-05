@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/event_poster.dart';
 import 'order_screen.dart';
 
 /// Event page: details, ticket types, quantity selection, order creation.
@@ -60,8 +62,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   Widget build(BuildContext context) {
     final e = widget.event;
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return Scaffold(
-      appBar: AppBar(title: Text(e.title, overflow: TextOverflow.ellipsis)),
       body: FutureBuilder<List<TicketType>>(
         future: _future,
         builder: (context, snap) {
@@ -69,77 +71,178 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           return Column(
             children: [
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(e.title, style: theme.textTheme.headlineSmall),
-                    const SizedBox(height: 12),
-                    if (e.startTime != null)
-                      _InfoRow(Icons.schedule, [
-                        formatDateTime(e.startTime!),
-                        if (e.endTime != null) formatTime(e.endTime!),
-                      ].join(' – ')),
-                    if (e.venue != null)
-                      _InfoRow(Icons.place,
-                          '${e.venue!.name}\n${e.venue!.address}'),
-                    if (e.category.isNotEmpty) _InfoRow(Icons.label, e.category),
-                    if (e.description.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(e.description),
-                    ],
-                    const SizedBox(height: 24),
-                    Text('Билеты', style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    if (_registrationClosed)
-                      Text(
-                        e.isCancelled
-                            ? 'Мероприятие отменено.'
-                            : 'Регистрация закрыта.',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    if (snap.connectionState != ConnectionState.done)
-                      const Center(child: CircularProgressIndicator())
-                    else if (snap.hasError)
-                      Text(snap.error is ApiException
-                          ? (snap.error as ApiException).message
-                          : 'Не удалось загрузить билеты')
-                    else if (types.isEmpty)
-                      const Text('Билеты пока не продаются.')
-                    else
-                      for (final t in types)
-                        _TicketTypeTile(
-                          type: t,
-                          quantity: _qty[t.id] ?? 0,
-                          enabled: !_registrationClosed && t.onSale,
-                          onChanged: (q) => setState(() => _qty[t.id] = q),
+                child: CustomScrollView(
+                  slivers: [
+                    SliverAppBar(
+                      pinned: true,
+                      expandedHeight: 280,
+                      backgroundColor: cs.surface,
+                      foregroundColor: Colors.white,
+                      iconTheme: const IconThemeData(color: Colors.white),
+                      flexibleSpace: FlexibleSpaceBar(
+                        collapseMode: CollapseMode.parallax,
+                        background: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            EventPoster(event: e),
+                            const DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Color(0x66000000), Colors.transparent],
+                                  stops: [0, 0.4],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 720),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (e.category.isNotEmpty)
+                                  Chip(
+                                    avatar: Icon(categoryIcon(e.category),
+                                        size: 16, color: cs.primary),
+                                    label: Text(categoryLabel(e.category)),
+                                    visualDensity: VisualDensity.compact,
+                                    side: BorderSide.none,
+                                    backgroundColor: cs.primaryContainer,
+                                  ),
+                                const SizedBox(height: 10),
+                                Text(e.title,
+                                    style: theme.textTheme.headlineMedium?.copyWith(
+                                        fontWeight: FontWeight.w800, height: 1.15)),
+                                const SizedBox(height: 18),
+                                if (e.startTime != null)
+                                  _InfoCard(
+                                    icon: Icons.event,
+                                    title: formatDateTime(e.startTime!).substring(0, 10),
+                                    subtitle: [
+                                      formatTime(e.startTime!),
+                                      if (e.endTime != null) formatTime(e.endTime!),
+                                    ].join(' – '),
+                                  ),
+                                if (e.venue != null)
+                                  _InfoCard(
+                                    icon: Icons.place,
+                                    title: e.venue!.name,
+                                    subtitle: e.venue!.address,
+                                  ),
+                                if (e.description.isNotEmpty) ...[
+                                  const SizedBox(height: 20),
+                                  Text(tr('detail.about'),
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 8),
+                                  Text(e.description,
+                                      style: theme.textTheme.bodyLarge
+                                          ?.copyWith(height: 1.45)),
+                                ],
+                                const SizedBox(height: 28),
+                                Text(tr('detail.tickets'),
+                                    style: theme.textTheme.titleLarge
+                                        ?.copyWith(fontWeight: FontWeight.w800)),
+                                const SizedBox(height: 10),
+                                if (_registrationClosed)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.info_outline,
+                                            size: 18, color: cs.error),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          e.isCancelled
+                                              ? tr('detail.cancelled')
+                                              : tr('detail.closed'),
+                                          style: TextStyle(color: cs.error),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (snap.connectionState != ConnectionState.done)
+                                  const Center(
+                                      child: Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: CircularProgressIndicator(),
+                                  ))
+                                else if (snap.hasError)
+                                  Text(snap.error is ApiException
+                                      ? (snap.error as ApiException).message
+                                      : tr('detail.ticketsFailed'))
+                                else if (types.isEmpty)
+                                  Text(tr('detail.noSale'))
+                                else
+                                  for (final t in types)
+                                    _TicketTypeTile(
+                                      type: t,
+                                      quantity: _qty[t.id] ?? 0,
+                                      enabled: !_registrationClosed && t.onSale,
+                                      onChanged: (q) => setState(() => _qty[t.id] = q),
+                                    ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
               if (_count > 0)
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Итого: ${_total(types) == 0 ? '0 ₸' : formatPrice(_total(types))}',
-                            style: theme.textTheme.titleMedium,
+                Material(
+                  elevation: 12,
+                  color: cs.surface,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(tr('detail.ticketCount', {'n': _count}),
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: cs.onSurfaceVariant)),
+                                Text(
+                                  _total(types) == 0
+                                      ? tr('free')
+                                      : formatPrice(_total(types)),
+                                  style: theme.textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        FilledButton(
-                          onPressed: _ordering ? null : _order,
-                          child: _ordering
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2))
-                              : Text(_total(types) == 0
-                                  ? 'Зарегистрироваться'
-                                  : 'Оформить заказ'),
-                        ),
-                      ],
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                            ),
+                            onPressed: _ordering ? null : _order,
+                            child: _ordering
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2))
+                                : Text(_total(types) == 0
+                                    ? tr('detail.register')
+                                    : tr('detail.order')),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -151,21 +254,48 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 }
 
-class _InfoRow extends StatelessWidget {
+class _InfoCard extends StatelessWidget {
   final IconData icon;
-  final String text;
-  const _InfoRow(this.icon, this.text);
+  final String title;
+  final String subtitle;
+  const _InfoCard({required this.icon, required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border.all(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text)),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: cs.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: cs.onPrimaryContainer),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                if (subtitle.isNotEmpty)
+                  Text(subtitle,
+                      style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -190,44 +320,68 @@ class _TicketTypeTile extends StatelessWidget {
     final max = type.available < type.maxPerOrder ? type.available : type.maxPerOrder;
     final String note;
     if (type.available <= 0) {
-      note = 'Распродано';
+      note = tr('ticketType.soldOut');
     } else if (!type.onSale) {
-      note = 'Продажи закрыты';
+      note = tr('ticketType.closed');
     } else {
-      note = 'Осталось: ${type.available}';
+      note = tr('ticketType.left', {'n': type.available});
     }
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(type.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Text(formatPrice(type.price)),
-                  if (type.description.isNotEmpty)
-                    Text(type.description,
-                        style: Theme.of(context).textTheme.bodySmall),
-                  Text(note, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Меньше',
-              onPressed: enabled && quantity > 0 ? () => onChanged(quantity - 1) : null,
-              icon: const Icon(Icons.remove_circle_outline),
-            ),
-            Text('$quantity', style: const TextStyle(fontSize: 16)),
-            IconButton(
-              tooltip: 'Больше',
-              onPressed: enabled && quantity < max ? () => onChanged(quantity + 1) : null,
-              icon: const Icon(Icons.add_circle_outline),
-            ),
-          ],
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final selected = quantity > 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: selected ? cs.primaryContainer.withValues(alpha: 0.45) : cs.surface,
+        border: Border.all(
+          color: selected ? cs.primary : cs.outlineVariant,
+          width: selected ? 1.5 : 1,
         ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(type.name,
+                    style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                  formatPrice(type.price),
+                  style: t.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: type.isFree ? const Color(0xFF16A34A) : cs.primary),
+                ),
+                if (type.description.isNotEmpty)
+                  Text(type.description,
+                      style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 2),
+                Text(note,
+                    style: t.bodySmall?.copyWith(
+                        color: enabled ? cs.onSurfaceVariant : cs.error)),
+              ],
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: tr('ticketType.less'),
+            onPressed: enabled && quantity > 0 ? () => onChanged(quantity - 1) : null,
+            icon: const Icon(Icons.remove),
+          ),
+          SizedBox(
+            width: 32,
+            child: Text('$quantity',
+                textAlign: TextAlign.center,
+                style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          ),
+          IconButton.filled(
+            tooltip: tr('ticketType.more'),
+            onPressed: enabled && quantity < max ? () => onChanged(quantity + 1) : null,
+            icon: const Icon(Icons.add),
+          ),
+        ],
       ),
     );
   }

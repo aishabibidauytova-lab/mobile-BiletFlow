@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../l10n/l10n.dart';
 import '../models/models.dart';
 
 /// Backend base URL. API docs: https://biletflow.duckdns.org/swagger-ui/index.html
@@ -36,21 +37,21 @@ class BiletFlowApi {
       if (res.statusCode == 401) {
         if (token != null) onUnauthorized?.call();
         throw ApiException(
-            _message(body) ?? 'Сессия истекла. Войдите снова.',
+            _message(body) ?? tr('api.sessionExpired'),
             unauthorized: true);
       }
       if (res.statusCode == 403) {
-        throw ApiException(_message(body) ?? 'Нет доступа.');
+        throw ApiException(_message(body) ?? tr('api.forbidden'));
       }
       if (res.statusCode >= 400) {
         throw ApiException(
-            _message(body) ?? 'Ошибка сервера (${res.statusCode})');
+            _message(body) ?? tr('api.server', {'code': res.statusCode}));
       }
       return body;
     } on TimeoutException {
-      throw ApiException('Нет ответа от сервера. Проверьте интернет.');
+      throw ApiException(tr('api.timeout'));
     } on http.ClientException {
-      throw ApiException('Нет соединения с сервером.');
+      throw ApiException(tr('api.noConnection'));
     }
   }
 
