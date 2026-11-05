@@ -36,6 +36,13 @@ class AuthService {
     await _storage.write(key: _key, value: r.$1);
   }
 
+  /// Replaces the session token (e.g. after the role changed) and reloads the user.
+  static Future<void> adoptToken(String token) async {
+    api.token = token;
+    await _storage.write(key: _key, value: token);
+    user = await api.me();
+  }
+
   static Future<void> logout() async {
     api.token = null;
     user = null;

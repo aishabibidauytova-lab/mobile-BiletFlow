@@ -36,12 +36,18 @@ class AppUser {
 }
 
 class Venue {
+  final int id;
   final String name;
   final String address;
-  const Venue(this.name, this.address);
+  final int? capacity;
+  const Venue(this.name, this.address, {this.id = 0, this.capacity});
 
-  factory Venue.fromJson(Map<String, dynamic> j) =>
-      Venue((j['name'] ?? '') as String, (j['address'] ?? '') as String);
+  factory Venue.fromJson(Map<String, dynamic> j) => Venue(
+        (j['name'] ?? '') as String,
+        (j['address'] ?? '') as String,
+        id: _num(j['id']).toInt(),
+        capacity: j['capacity'] == null ? null : _num(j['capacity']).toInt(),
+      );
 }
 
 class EventInfo {
@@ -51,10 +57,14 @@ class EventInfo {
   final String category;
   final DateTime? startTime;
   final DateTime? endTime;
+  final DateTime? registrationOpeningTime;
   final DateTime? registrationClosingTime;
   final String status; // DRAFT, PUBLISHED, CANCELLED
   final Venue? venue;
   final String? posterUrl;
+  final int? capacity;
+  final String visibility; // PUBLIC, UNLISTED, PRIVATE
+  final int? organizerId;
 
   const EventInfo({
     required this.id,
@@ -63,10 +73,14 @@ class EventInfo {
     this.category = '',
     this.startTime,
     this.endTime,
+    this.registrationOpeningTime,
     this.registrationClosingTime,
     this.status = 'PUBLISHED',
     this.venue,
     this.posterUrl,
+    this.capacity,
+    this.visibility = 'PUBLIC',
+    this.organizerId,
   });
 
   bool get isCancelled => status == 'CANCELLED';
@@ -84,9 +98,14 @@ class EventInfo {
         category: (j['category'] ?? '') as String,
         startTime: _date(j['startTime']),
         endTime: _date(j['endTime']),
+        registrationOpeningTime: _date(j['registrationOpeningTime']),
         registrationClosingTime: _date(j['registrationClosingTime']),
         status: (j['status'] ?? 'PUBLISHED') as String,
         posterUrl: j['posterUrl'] as String?,
+        capacity: j['capacity'] == null ? null : _num(j['capacity']).toInt(),
+        visibility: (j['visibilityStatus'] ?? 'PUBLIC') as String,
+        organizerId:
+            j['organizerId'] == null ? null : _num(j['organizerId']).toInt(),
         venue: j['venue'] != null
             ? Venue.fromJson(j['venue'] as Map<String, dynamic>)
             : null,
@@ -99,6 +118,8 @@ class TicketType {
   final String description;
   final num price;
   final int available;
+  final int quantity;
+  final int sold;
   final int maxPerOrder;
   final DateTime? salesStart;
   final DateTime? salesEnd;
@@ -110,6 +131,8 @@ class TicketType {
     this.description = '',
     required this.price,
     required this.available,
+    this.quantity = 0,
+    this.sold = 0,
     this.maxPerOrder = 10,
     this.salesStart,
     this.salesEnd,
@@ -131,6 +154,8 @@ class TicketType {
         description: (j['description'] ?? '') as String,
         price: _num(j['price']),
         available: _num(j['available']).toInt(),
+        quantity: _num(j['quantity']).toInt(),
+        sold: _num(j['sold']).toInt(),
         maxPerOrder: _num(j['maxPerOrder'] ?? 10).toInt(),
         salesStart: _date(j['salesStart']),
         salesEnd: _date(j['salesEnd']),
@@ -308,4 +333,53 @@ String formatPrice(num p) {
     b.write(s[i]);
   }
   return '$b ₸';
+}
+
+
+class StaffMember {
+  final int userId;
+  final String email;
+  final DateTime? assignedAt;
+  const StaffMember(this.userId, this.email, this.assignedAt);
+
+  factory StaffMember.fromJson(Map<String, dynamic> j) => StaffMember(
+        _num(j['userId']).toInt(),
+        (j['email'] ?? '') as String,
+        _date(j['assignedAt']),
+      );
+}
+
+class OrganizerProfile {
+  final int id;
+  final String contactInformation;
+  final String verificationStatus;
+  const OrganizerProfile(this.id, this.contactInformation, this.verificationStatus);
+
+  factory OrganizerProfile.fromJson(Map<String, dynamic> j) => OrganizerProfile(
+        _num(j['id']).toInt(),
+        (j['contactInformation'] ?? '') as String,
+        (j['verificationStatus'] ?? '') as String,
+      );
+}
+
+/// Admin view of a user account.
+class UserAccount {
+  final int id;
+  final String email;
+  final String role;
+  final DateTime? createdAt;
+  const UserAccount(this.id, this.email, this.role, this.createdAt);
+
+  factory UserAccount.fromJson(Map<String, dynamic> j) => UserAccount(
+        _num(j['id']).toInt(),
+        (j['email'] ?? '') as String,
+        (j['role'] ?? '') as String,
+        _date(j['createdAt']),
+      );
+}
+
+/// ISO local date-time without zone/millis, as the backend expects.
+String isoLocal(DateTime d) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)}T${two(d.hour)}:${two(d.minute)}:00';
 }
