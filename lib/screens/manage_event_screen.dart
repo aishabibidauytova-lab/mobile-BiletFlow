@@ -7,7 +7,10 @@ import '../services/api_service.dart';
 import '../widgets/async_list.dart';
 import '../widgets/date_time_field.dart';
 import '../widgets/event_poster.dart';
+import 'activation_screen.dart';
+import 'campaigns_screen.dart';
 import 'event_form_screen.dart';
+import 'event_sales_screen.dart';
 import 'organizer_events_screen.dart' show eventStatusColor;
 import 'scanner_screen.dart';
 
@@ -375,6 +378,45 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                                     ),
                             icon: const Icon(Icons.qr_code_scanner),
                             label: Text(tr('manage.checkin')),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => EventSalesScreen(
+                                      eventId: e.id, title: e.title)),
+                            ),
+                            icon: const Icon(Icons.insights),
+                            label: Text(tr('sales.title')),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: cancelled
+                                ? null
+                                : () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => CampaignsScreen(event: e)),
+                                    ),
+                            icon: const Icon(Icons.local_offer_outlined),
+                            label: Text(tr('camp.title')),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: cancelled
+                                ? null
+                                : () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => ActivationScreen(event: e)),
+                                    );
+                                    _reload();
+                                  },
+                            icon: Icon(e.paidSalesActive
+                                ? Icons.verified_outlined
+                                : Icons.payments_outlined),
+                            label: Text(e.paidSalesActive
+                                ? tr('act.isActiveShort')
+                                : tr('act.title')),
                           ),
                           if (!cancelled)
                             OutlinedButton.icon(

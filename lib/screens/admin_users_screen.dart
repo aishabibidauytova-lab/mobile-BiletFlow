@@ -174,7 +174,10 @@ class _UserCardState extends State<_UserCard> {
   final _form = GlobalKey<FormState>();
   late final _email = TextEditingController(text: widget.user.email);
   final _password = TextEditingController();
+  late String _role = widget.user.role;
   bool _saving = false;
+
+  static const _roles = ['ATTENDEE', 'ORGANIZER', 'EVENT_ADMIN', 'PLATFORM_ADMIN'];
 
   @override
   void dispose() {
@@ -188,17 +191,21 @@ class _UserCardState extends State<_UserCard> {
     final email = _email.text.trim();
     final password = _password.text;
     final emailChanged = email != widget.user.email;
-    if (!emailChanged && password.isEmpty) {
+    final roleChanged = _role != widget.user.role;
+    if (!emailChanged && password.isEmpty && !roleChanged) {
       widget.onError(tr('admin.nothingChanged'));
       return;
     }
     setState(() => _saving = true);
     try {
-      await api.updateUser(
-        widget.user.id,
-        email: emailChanged ? email : null,
-        password: password.isEmpty ? null : password,
-      );
+      if (emailChanged || password.isNotEmpty) {
+        await api.updateUser(
+          widget.user.id,
+          email: emailChanged ? email : null,
+          password: password.isEmpty ? null : password,
+        );
+      }
+      if (roleChanged) await api.changeRole(widget.user.id, _role);
       _password.clear();
       await widget.onSaved();
     } on ApiException catch (e) {
@@ -287,6 +294,21 @@ class _UserCardState extends State<_UserCard> {
                           ? null
                           : tr('profile.passwordShort'),
                     ),
+                    if (!widget.isSelf) ...[
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        initialValue: _roles.contains(_role) ? _role : null,
+                        decoration: InputDecoration(
+                          labelText: tr('admin.role'),
+                          border: const OutlineInputBorder(),
+                        ),
+                        items: [
+                          for (final r in _roles)
+                            DropdownMenuItem(value: r, child: Text(tr('role.$r'))),
+                        ],
+                        onChanged: (v) => setState(() => _role = v ?? _role),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: _saving ? null : _save,

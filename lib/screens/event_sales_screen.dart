@@ -1,0 +1,333 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../l10n/l10n.dart';
+import '../models/models.dart';
+import '../services/api_service.dart';
+import '../widgets/async_list.dart';
+import 'order_screen.dart' show orderStatusLabel;
+
+/// Sales of one event (SRS 4.15), calculated by the server from orders:
+/// revenue, discounts, fees, estimated payout, ticket types, daily sales, orders.
+class EventSalesScreen extends StatefulWidget {
+  final int eventId;
+  final String title;
+  const EventSalesScreen({super.key, required this.eventId, required this.title});
+
+  @override
+  State<EventSalesScreen> createState() => _EventSalesScreenState();
+}
+
+class _EventSalesScreenState extends State<EventSalesScreen> {
+  late Future<EventSales> _future = api.getEventSales(widget.eventId);
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title, overflow: TextOverflow.ellipsis),
+          bottom: TabBar(tabs: [
+            Tab(text: tr('sales.title')),
+            Tab(text: tr('sales.orders')),
+          ]),
+        ),
+        body: TabBarView(
+          children: [
+            FutureBuilder<EventSales>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  final err = snap.error;
+                  return Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(err is ApiException ? err.message : tr('err.load')),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () =>
+                            setState(() => _future = api.getEventSales(widget.eventId)),
+                        child: Text(tr('retry')),
+                      ),
+                    ]),
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    setState(() => _future = api.getEventSales(widget.eventId));
+                    await _future.then((_) {}, onError: (_) {});
+                  },
+                  child: _SalesBody(sales: snap.data!),
+                );
+              },
+            ),
+            _OrdersTab(eventId: widget.eventId),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Figures shared by the per-event screen and the organizer's sales tab.
+class SalesFiguresGrid extends StatelessWidget {
+  final SalesFigures f;
+  final int? capacity;
+  const SalesFiguresGrid({super.key, required this.f, this.capacity});
+
+  @override
+  Widget build(BuildContext context) {
+    final tiles = [
+      (tr('sales.sold'), capacity == null ? '${f.ticketsSold}' : '${f.ticketsSold} / $capacity'),
+      (tr('sales.reserved'), '${f.ticketsReserved}'),
+      (tr('sales.paidOrders'), '${f.paidOrders}'),
+      (tr('sales.revenue'), formatPrice(f.revenue)),
+      (tr('sales.discounts'), formatPrice(f.discounts)),
+      (tr('sales.net'), formatPrice(f.netRevenue)),
+      (tr('sales.fees'), formatPrice(f.processingFees)),
+      (tr('sales.payout'), formatPrice(f.estimatedPayout)),
+    ];
+    return LayoutBuilder(builder: (context, c) {
+      final perRow = c.maxWidth > 560 ? 4 : 2;
+      final w = (c.maxWidth - (perRow - 1) * 10) / perRow;
+      return Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final (label, value) in tiles)
+            SizedBox(width: w, child: _StatTile(label, value)),
+        ],
+      );
+    });
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  const _StatTile(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border.all(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(height: 2),
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalesBody extends StatelessWidget {
+  final EventSales sales;
+  const _SalesBody({required this.sales});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final days = sales.salesByDay;
+    final maxRevenue = days.fold<num>(0, (m, d) => d.revenue > m ? d.revenue : m);
+    final maxSold = days.fold<int>(0, (m, d) => d.ticketsSold > m ? d.ticketsSold : m);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SalesFiguresGrid(f: sales.figures, capacity: sales.capacity),
+        const SizedBox(height: 20),
+        Text(tr('sales.byType'), style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        for (final tt in sales.ticketTypes)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              title: Text(tt.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr('sales.typeLine', {
+                    'sold': tt.sold,
+                    'qty': tt.quantity,
+                    'reserved': tt.reserved,
+                    'left': tt.available,
+                  })),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: tt.quantity == 0 ? 0 : tt.sold / tt.quantity,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ],
+              ),
+              trailing: Text(formatPrice(tt.revenue),
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ),
+        const SizedBox(height: 16),
+        Text(tr('sales.byDay'), style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        if (days.isEmpty)
+          Text(tr('sales.noSales'), style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+        else
+          for (final d in days)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 84,
+                    child: Text(d.date == null ? '—' : formatDateTime(d.date!).substring(0, 10),
+                        style: t.bodySmall),
+                  ),
+                  Expanded(
+                    child: Semantics(
+                      label: '${d.ticketsSold} • ${formatPrice(d.revenue)}',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          // Free events: scale by tickets instead of revenue.
+                          value: maxRevenue > 0
+                              ? d.revenue / maxRevenue
+                              : (maxSold == 0 ? 0 : d.ticketsSold / maxSold),
+                          minHeight: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 104,
+                    child: Text('${d.ticketsSold} • ${formatPrice(d.revenue)}',
+                        textAlign: TextAlign.right, style: t.bodySmall),
+                  ),
+                ],
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+class _OrdersTab extends StatefulWidget {
+  final int eventId;
+  const _OrdersTab({required this.eventId});
+
+  @override
+  State<_OrdersTab> createState() => _OrdersTabState();
+}
+
+class _OrdersTabState extends State<_OrdersTab> {
+  final _list = GlobalKey<AsyncListState<EventOrder>>();
+  final _query = TextEditingController();
+  Timer? _debounce;
+  String? _status;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _query.dispose();
+    super.dispose();
+  }
+
+  void _reload() => _list.currentState?.reload();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: TextField(
+            controller: _query,
+            onChanged: (_) {
+              _debounce?.cancel();
+              _debounce = Timer(const Duration(milliseconds: 400), _reload);
+            },
+            decoration: InputDecoration(
+              hintText: tr('sales.searchOrders'),
+              prefixIcon: const Icon(Icons.search),
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 50,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            children: [
+              for (final s in [null, ...OrderStatus.values])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(s == null ? tr('support.all') : orderStatusLabel(s).$1),
+                    selected: _status == s?.name.toUpperCase(),
+                    onSelected: (_) {
+                      setState(() => _status = s?.name.toUpperCase());
+                      _reload();
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: AsyncList<EventOrder>(
+            key: _list,
+            load: () =>
+                api.getEventOrders(widget.eventId, status: _status, query: _query.text),
+            emptyText: tr('sales.noOrders'),
+            itemBuilder: (context, o) {
+              final (label, color) = orderStatusLabel(o.status);
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text(o.attendeeName?.isNotEmpty == true
+                      ? '${o.attendeeName} · ${o.buyerEmail}'
+                      : o.buyerEmail),
+                  subtitle: Text([
+                    tr('orders.number', {'id': o.id}),
+                    tr('orders.ticketsN', {'n': o.ticketCount}),
+                    if (o.promoCode != null) '${o.promoCode} −${formatPrice(o.discountAmount)}',
+                    if (o.createdAt != null) formatDateTime(o.createdAt!),
+                  ].join(' • ')),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(o.totalAmount == 0 ? tr('free') : formatPrice(o.totalAmount),
+                          style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
+                      const SizedBox(height: 4),
+                      StatusChip(label, color),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}

@@ -4,6 +4,7 @@ import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/auth_service.dart';
 import '../widgets/language_menu.dart';
+import 'account_recovery_screens.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -139,6 +140,36 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(_register
                         ? tr('login.haveAccount')
                         : tr('login.noAccount')),
+                  ),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    children: [
+                      if (!_register)
+                        TextButton(
+                          onPressed: _loading
+                              ? null
+                              : () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ForgotPasswordScreen(
+                                          initialEmail: _email.text.trim()),
+                                    ),
+                                  ),
+                          child: Text(tr('login.forgot')),
+                        ),
+                      TextButton(
+                        onPressed: _loading
+                            ? null
+                            : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VerifyEmailScreen(
+                                        initialEmail: _email.text.trim()),
+                                  ),
+                                ),
+                        child: Text(tr('login.verifyEmail')),
+                      ),
+                    ],
                   ),
                 ],
               ),

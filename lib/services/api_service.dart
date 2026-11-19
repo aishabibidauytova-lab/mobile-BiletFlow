@@ -118,20 +118,45 @@ class BiletFlowApi {
     return b.map((e) => TicketType.fromJson(e)).where((t) => !t.hidden).toList();
   }
 
-  Future<Order> createOrder(int eventId, Map<int, int> quantities) async {
-    final b = await _post('/orders', {
-      'eventId': eventId,
-      'items': [
+  static List<Map<String, int>> _items(Map<int, int> quantities) => [
         for (final e in quantities.entries)
           if (e.value > 0) {'ticketTypeId': e.key, 'quantity': e.value},
-      ],
+      ];
+
+  Future<Order> createOrder(int eventId, Map<int, int> quantities,
+      {String? attendeeName, String? promoCode}) async {
+    final b = await _post('/orders', {
+      'eventId': eventId,
+      'items': _items(quantities),
+      if (attendeeName != null && attendeeName.isNotEmpty) 'attendeeName': attendeeName,
+      if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
     });
     return Order.fromJson(b);
   }
 
+  /// Price preview with the promo code applied (the server calculates discounts).
+  Future<OrderQuote> quoteOrder(int eventId, Map<int, int> quantities,
+          {String? promoCode}) async =>
+      OrderQuote.fromJson(await _post('/orders/quote', {
+        'eventId': eventId,
+        'items': _items(quantities),
+        if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
+      }));
+
   /// Simulated payment (SRS 3.2: no real money moves in the academic MVP).
-  Future<Order> payOrder(int orderId) async =>
-      Order.fromJson(await _post('/orders/$orderId/pay'));
+  /// [declined] simulates a failed card payment.
+  Future<Order> payOrder(int orderId, {bool declined = false}) async =>
+      Order.fromJson(await _post('/orders/$orderId/pay',
+          declined ? {'simulatedOutcome': 'DECLINED'} : null));
+
+  /// Asks the payment provider for the latest status of the order's payment.
+  Future<Order> checkPayment(int orderId) async =>
+      Order.fromJson(await _post('/orders/$orderId/payment-check'));
+
+  Future<List<Payment>> getPayments(int orderId) async {
+    final b = await _get('/orders/$orderId/payments') as List;
+    return b.map((e) => Payment.fromJson(e as Map<String, dynamic>)).toList();
+  }
 
   Future<Order> cancelOrder(int orderId) async =>
       Order.fromJson(await _post('/orders/$orderId/cancel'));
@@ -151,6 +176,29 @@ class BiletFlowApi {
 
   /// Server-generated QR image (PNG) for a ticket.
   Uri ticketQrUri(int ticketId) => _uri('/tickets/$ticketId/qr');
+
+  /// Print-ready PDF of a ticket (SRS 4.7).
+  Future<List<int>> getTicketPdf(int ticketId) => _getBytes('/tickets/$ticketId/pdf');
+
+  Future<List<int>> _getBytes(String path) async {
+    try {
+      final res = await _client
+          .get(_uri(path), headers: authHeaders)
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode >= 400) {
+        final body = _tryJson(utf8.decode(res.bodyBytes, allowMalformed: true));
+        if (res.statusCode == 401 && token != null) onUnauthorized?.call();
+        throw ApiException(
+            _message(body) ?? tr('api.server', {'code': res.statusCode}),
+            unauthorized: res.statusCode == 401);
+      }
+      return res.bodyBytes;
+    } on TimeoutException {
+      throw ApiException(tr('api.timeout'));
+    } on http.ClientException {
+      throw ApiException(tr('api.noConnection'));
+    }
+  }
 
   // --- Event Admin: check-in ------------------------------------------------
 
@@ -305,4 +353,180 @@ class BiletFlowApi {
       }));
 
   Future<void> deleteUser(int id) async => _delete('/users/$id');
+
+  /// Roles: ATTENDEE, ORGANIZER, EVENT_ADMIN, PLATFORM_ADMIN.
+  Future<UserAccount> changeRole(int id, String role) async =>
+      UserAccount.fromJson(await _put('/users/$id/role', {'role': role}));
+
+  Future<List<VerificationRequest>> getVerificationRequests() async {
+    final b = await _get('/organizers/verification-requests', _pageAll);
+    return PageResult.fromJson(b, VerificationRequest.fromJson).items;
+  }
+
+  Future<void> reviewOrganizer(int profileId, bool approved, {String? note}) =>
+      _post('/organizers/$profileId/verification', {
+        'approved': approved,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+
+  /// Admin: paid-sales activations, optionally filtered by status.
+  Future<List<Activation>> getActivations({String? status}) async {
+    final b = await _get('/admin/paid-sales-activations',
+        {..._pageAll, 'status': ?status});
+    return PageResult.fromJson(b, Activation.fromJson).items;
+  }
+
+  Future<Activation> suspendPaidSales(int eventId, String reason) async =>
+      Activation.fromJson(await _post(
+          '/events/$eventId/activation/suspend', {'reason': reason}));
+
+  Future<Activation> unsuspendPaidSales(int eventId) async =>
+      Activation.fromJson(await _post('/events/$eventId/activation/unsuspend'));
+
+  /// Admin: stop all sales of a suspicious event (SRS 4.12).
+  Future<EventInfo> suspendEvent(int eventId, String reason) async =>
+      EventInfo.fromJson(await _post('/events/$eventId/suspend', {'reason': reason}));
+
+  Future<EventInfo> unsuspendEvent(int eventId) async =>
+      EventInfo.fromJson(await _post('/events/$eventId/unsuspend'));
+
+  // --- Account recovery and email verification ------------------------------------
+
+  Future<void> forgotPassword(String email) =>
+      _post('/auth/forgot-password', {'email': email});
+
+  Future<void> resetPassword(String token, String newPassword) =>
+      _post('/auth/reset-password', {'token': token, 'newPassword': newPassword});
+
+  Future<void> verifyEmail(String token) =>
+      _post('/auth/verify-email', {'token': token});
+
+  Future<void> resendVerification(String email) =>
+      _post('/auth/resend-verification', {'email': email});
+
+  // --- Notifications ---------------------------------------------------------------
+
+  Future<List<AppNotification>> getNotifications() async {
+    final b = await _get('/notifications', {..._pageAll, 'sort': 'createdAt,desc'});
+    return PageResult.fromJson(b, AppNotification.fromJson).items;
+  }
+
+  Future<int> getUnreadCount() async {
+    final b = await _get('/notifications/unread-count');
+    if (b is Map && b.isNotEmpty) return _toInt(b['unread'] ?? b.values.first);
+    return _toInt(b);
+  }
+
+  static int _toInt(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+
+  Future<void> markNotificationRead(int id) => _post('/notifications/$id/read');
+
+  Future<void> markAllNotificationsRead() => _post('/notifications/read-all');
+
+  // --- Support --------------------------------------------------------------------
+
+  Future<List<SupportCase>> getSupportCases({String? status, bool? escalated}) async {
+    final b = await _get('/support/cases', {
+      ..._pageAll,
+      'sort': 'updatedAt,desc',
+      'status': ?status,
+      if (escalated != null) 'escalated': '$escalated',
+    });
+    return PageResult.fromJson(b, SupportCase.fromJson).items;
+  }
+
+  Future<SupportCaseDetail> getSupportCase(int id) async =>
+      SupportCaseDetail.fromJson(await _get('/support/cases/$id'));
+
+  /// [type]: ATTENDEE (to the event organizer) or PLATFORM (to BiletFlow staff).
+  Future<SupportCaseDetail> openSupportCase({
+    required String type,
+    required String category,
+    required String subject,
+    required String message,
+    int? eventId,
+    int? orderId,
+    int? ticketId,
+  }) async =>
+      SupportCaseDetail.fromJson(await _post('/support/cases', {
+        'type': type,
+        'category': category,
+        'subject': subject,
+        'message': message,
+        'eventId': ?eventId,
+        'orderId': ?orderId,
+        'ticketId': ?ticketId,
+      }));
+
+  Future<SupportCaseDetail> replyToCase(int id, String body) async =>
+      SupportCaseDetail.fromJson(await _post('/support/cases/$id/messages', {'body': body}));
+
+  Future<SupportCaseDetail> setCaseStatus(int id, String status) async =>
+      SupportCaseDetail.fromJson(await _post('/support/cases/$id/status', {'status': status}));
+
+  Future<SupportCaseDetail> assignCase(int id, String email) async =>
+      SupportCaseDetail.fromJson(await _post('/support/cases/$id/assign', {'email': email}));
+
+  Future<SupportCaseDetail> escalateCase(int id) async =>
+      SupportCaseDetail.fromJson(await _post('/support/cases/$id/escalate'));
+
+  // --- Organizer: promo campaigns ----------------------------------------------------
+
+  Future<List<Campaign>> getCampaigns(int eventId) async {
+    final b = await _get('/events/$eventId/campaigns') as List;
+    return b.map((e) => Campaign.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<Campaign> createCampaign(int eventId, Map<String, dynamic> body) async =>
+      Campaign.fromJson(await _post('/events/$eventId/campaigns', body));
+
+  Future<Campaign> setCampaignEnabled(int eventId, int id, bool enabled) async =>
+      Campaign.fromJson(await _post(
+          '/events/$eventId/campaigns/$id/${enabled ? 'enable' : 'disable'}'));
+
+  /// Server-generated Campaign QR image (PNG).
+  Uri campaignQrUri(int eventId, int id) => _uri('/events/$eventId/campaigns/$id/qr');
+
+  // --- Organizer: paid sales activation and payout ----------------------------------
+
+  Future<Activation> getActivation(int eventId) async =>
+      Activation.fromJson(await _get('/events/$eventId/activation'));
+
+  /// [step]: pay-fee, accept-terms or activate.
+  Future<Activation> activationStep(int eventId, String step) async =>
+      Activation.fromJson(await _post('/events/$eventId/activation/$step'));
+
+  Future<PayoutAccount?> getPayoutAccount() async {
+    final b = await _get('/organizers/profile/payout-account');
+    return b is Map<String, dynamic> && b.isNotEmpty ? PayoutAccount.fromJson(b) : null;
+  }
+
+  Future<PayoutAccount> savePayoutAccount(
+          String bankName, String accountHolder, String iban) async =>
+      PayoutAccount.fromJson(await _put('/organizers/profile/payout-account', {
+        'bankName': bankName,
+        'accountHolder': accountHolder,
+        'iban': iban,
+      }));
+
+  Future<OrganizerProfile> requestVerification() async =>
+      OrganizerProfile.fromJson(await _post('/organizers/profile/verification'));
+
+  // --- Organizer: sales -----------------------------------------------------------
+
+  Future<SalesSummary> getSalesSummary() async =>
+      SalesSummary.fromJson(await _get('/organizer/sales/events'));
+
+  Future<EventSales> getEventSales(int eventId) async =>
+      EventSales.fromJson(await _get('/organizer/events/$eventId/sales'));
+
+  Future<List<EventOrder>> getEventOrders(int eventId, {String? status, String? query}) async {
+    final b = await _get('/organizer/events/$eventId/orders', {
+      ..._pageAll,
+      'sort': 'createdAt,desc',
+      'status': ?status,
+      if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+    });
+    return PageResult.fromJson(b, EventOrder.fromJson).items;
+  }
 }
