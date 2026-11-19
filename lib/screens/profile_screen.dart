@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/async_list.dart';
+import 'account_recovery_screens.dart';
 import 'login_screen.dart';
 
 /// Account page: email/password, language-independent info, organizer profile,
@@ -250,6 +251,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _busy ? null : () => _changeCredentials(email: false),
                     ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.mark_email_read_outlined),
+                      title: Text(tr('verify.title')),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => VerifyEmailScreen(initialEmail: u.email)),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -309,6 +321,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 : Colors.blueGrey,
                           ),
                         ),
+                        if (_profile!.verificationStatus != 'VERIFIED') ...[
+                          const SizedBox(height: 10),
+                          FilledButton.tonal(
+                            onPressed: _busy
+                                ? null
+                                : () => _run(() async {
+                                      final p = await api.requestVerification();
+                                      if (mounted) setState(() => _profile = p);
+                                      _toast(tr('act.verificationRequested'));
+                                    }),
+                            child: Text(tr('act.requestVerification')),
+                          ),
+                        ],
                       ],
                     ),
                   ),

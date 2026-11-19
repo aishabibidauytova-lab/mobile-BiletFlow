@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
 
 import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/app_background.dart';
 import '../widgets/event_poster.dart';
+import 'support_screens.dart';
 
 /// Dashed tear line with half-circle notches on both sides.
 class _TearLine extends StatelessWidget {
@@ -265,10 +267,75 @@ class TicketScreen extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 18),
+              if (t.status != TicketStatus.cancelled) _PdfButton(ticket: t),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => NewSupportCaseScreen(
+                      eventId: t.eventId,
+                      orderId: t.orderId,
+                      ticketId: t.id,
+                      context: '${t.eventTitle} • ${t.ticketTypeName} • №${t.id}',
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.support_agent),
+                label: Text(tr('support.contact')),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Downloads the server-generated, print-ready PDF (SRS 4.7) and opens the
+/// system share / print dialog (save to Files, print, send).
+class _PdfButton extends StatefulWidget {
+  final Ticket ticket;
+  const _PdfButton({required this.ticket});
+
+  @override
+  State<_PdfButton> createState() => _PdfButtonState();
+}
+
+class _PdfButtonState extends State<_PdfButton> {
+  bool _loading = false;
+
+  Future<void> _download() async {
+    setState(() => _loading = true);
+    try {
+      final bytes = await api.getTicketPdf(widget.ticket.id);
+      await Printing.sharePdf(
+          bytes: Uint8List.fromList(bytes),
+          filename: 'biletflow-ticket-${widget.ticket.id}.pdf');
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(tr('ticket.pdfFailed'))));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.tonalIcon(
+      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+      onPressed: _loading ? null : _download,
+      icon: _loading
+          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.picture_as_pdf_outlined),
+      label: Text(tr('ticket.pdf')),
     );
   }
 }

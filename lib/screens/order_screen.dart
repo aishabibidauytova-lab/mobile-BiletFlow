@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import 'support_screens.dart';
 import 'ticket_screen.dart';
 
 (String, Color) orderStatusLabel(OrderStatus s) {
@@ -30,6 +31,7 @@ class OrderScreen extends StatefulWidget {
 class _OrderScreenState extends State<OrderScreen> {
   late Order _order = widget.order;
   List<Ticket> _tickets = [];
+  List<Payment> _payments = const [];
   bool _busy = false;
 
   @override
@@ -44,16 +46,34 @@ class _OrderScreenState extends State<OrderScreen> {
       final tickets = o.status == OrderStatus.paid
           ? (await api.getMyTickets()).where((t) => t.orderId == o.id).toList()
           : <Ticket>[];
+      List<Payment> payments = const [];
+      try {
+        payments = await api.getPayments(o.id);
+      } on ApiException {
+        // Free orders have no payments; history is optional.
+      }
       if (mounted) {
         setState(() {
           _order = o;
           _tickets = tickets;
+          _payments = payments;
         });
       }
     } on ApiException catch (e) {
       _toast(e.message);
     }
   }
+
+  void _contactSupport() => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NewSupportCaseScreen(
+            eventId: _order.eventId,
+            orderId: _order.id,
+            context: tr('orders.number', {'id': _order.id}),
+          ),
+        ),
+      );
 
   void _toast(String msg) {
     if (mounted) {
@@ -69,6 +89,8 @@ class _OrderScreenState extends State<OrderScreen> {
       await _refresh();
     } on ApiException catch (e) {
       _toast(e.message);
+      // A declined payment is reported as an error but is still recorded.
+      await _refresh();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -195,7 +217,38 @@ class _OrderScreenState extends State<OrderScreen> {
                               ],
                             ),
                           ),
+                        if (o.attendeeName != null && o.attendeeName!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(tr('order.attendee', {'name': o.attendeeName}),
+                                style: theme.textTheme.bodySmall
+                                    ?.copyWith(color: cs.onSurfaceVariant)),
+                          ),
                         const Divider(height: 24),
+                        if (o.discountAmount > 0) ...[
+                          Row(
+                            children: [
+                              Expanded(child: Text(tr('checkout.subtotal'))),
+                              Text(formatPrice(o.subtotalAmount)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  o.promoCode == null
+                                      ? tr('checkout.discount')
+                                      : tr('checkout.discountCode', {'code': o.promoCode}),
+                                  style: TextStyle(color: Colors.green.shade700),
+                                ),
+                              ),
+                              Text('−${formatPrice(o.discountAmount)}',
+                                  style: TextStyle(color: Colors.green.shade700)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                         Row(
                           children: [
                             Expanded(
@@ -242,6 +295,59 @@ class _OrderScreenState extends State<OrderScreen> {
                             free ? tr('order.confirmedToast') : tr('order.paidToast')),
                     child: Text(free ? tr('order.confirm') : tr('order.pay')),
                   ),
+                  if (!free) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _busy
+                                ? null
+                                : () => _run(() => api.payOrder(o.id, declined: true),
+                                    tr('order.declinedToast')),
+                            icon: const Icon(Icons.credit_card_off_outlined),
+                            label: Text(tr('order.simulateDecline')),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _busy
+                                ? null
+                                : () => _run(() => api.checkPayment(o.id),
+                                    tr('order.statusUpdated')),
+                            icon: const Icon(Icons.sync),
+                            label: Text(tr('order.checkPayment')),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+                if (_payments.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Text(tr('order.payments'),
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  for (final p in _payments)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      shape: border,
+                      child: ListTile(
+                        leading: Icon(
+                          p.succeeded ? Icons.check_circle : Icons.error_outline,
+                          color: p.succeeded ? Colors.green.shade700 : cs.error,
+                        ),
+                        title: Text(
+                            '${formatPrice(p.amount)} • ${p.succeeded ? tr('order.paymentOk') : tr('order.paymentFailed')}'),
+                        subtitle: Text([
+                          if (p.createdAt != null) formatDateTime(p.createdAt!),
+                          if (p.simulated) tr('order.simulated'),
+                          if (p.failureReason != null) p.failureReason!,
+                        ].join(' • ')),
+                      ),
+                    ),
                 ],
                 if (o.status == OrderStatus.pending || o.status == OrderStatus.paid)
                   Padding(
@@ -252,6 +358,11 @@ class _OrderScreenState extends State<OrderScreen> {
                       child: Text(tr('order.cancel')),
                     ),
                   ),
+                TextButton.icon(
+                  onPressed: _contactSupport,
+                  icon: const Icon(Icons.support_agent),
+                  label: Text(tr('support.contact')),
+                ),
                 if (_tickets.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text(tr('order.yourTickets'),

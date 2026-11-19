@@ -2,6 +2,8 @@
 
 import '../l10n/l10n.dart';
 
+part 'more_models.dart';
+
 DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse(v as String);
 
 num _num(dynamic v) => v is num ? v : num.tryParse('$v') ?? 0;
@@ -65,6 +67,9 @@ class EventInfo {
   final int? capacity;
   final String visibility; // PUBLIC, UNLISTED, PRIVATE
   final int? organizerId;
+  final bool paidSalesActive;
+  final bool suspended;
+  final String? suspensionReason;
 
   const EventInfo({
     required this.id,
@@ -81,6 +86,9 @@ class EventInfo {
     this.capacity,
     this.visibility = 'PUBLIC',
     this.organizerId,
+    this.paidSalesActive = false,
+    this.suspended = false,
+    this.suspensionReason,
   });
 
   bool get isCancelled => status == 'CANCELLED';
@@ -106,6 +114,9 @@ class EventInfo {
         visibility: (j['visibilityStatus'] ?? 'PUBLIC') as String,
         organizerId:
             j['organizerId'] == null ? null : _num(j['organizerId']).toInt(),
+        paidSalesActive: (j['paidSalesActive'] ?? false) as bool,
+        suspended: (j['suspended'] ?? false) as bool,
+        suspensionReason: j['suspensionReason'] as String?,
         venue: j['venue'] != null
             ? Venue.fromJson(j['venue'] as Map<String, dynamic>)
             : null,
@@ -184,6 +195,10 @@ class Order {
   final String eventTitle;
   final OrderStatus status;
   final num totalAmount;
+  final num subtotalAmount;
+  final num discountAmount;
+  final String? promoCode;
+  final String? attendeeName;
   final DateTime? createdAt;
   final DateTime? expiresAt;
   final List<OrderItem> items;
@@ -194,6 +209,10 @@ class Order {
     required this.eventTitle,
     required this.status,
     required this.totalAmount,
+    this.subtotalAmount = 0,
+    this.discountAmount = 0,
+    this.promoCode,
+    this.attendeeName,
     this.createdAt,
     this.expiresAt,
     this.items = const [],
@@ -208,6 +227,10 @@ class Order {
           orElse: () => OrderStatus.pending,
         ),
         totalAmount: _num(j['totalAmount']),
+        subtotalAmount: _num(j['subtotalAmount'] ?? j['totalAmount']),
+        discountAmount: _num(j['discountAmount']),
+        promoCode: j['promoCode'] as String?,
+        attendeeName: j['attendeeName'] as String?,
         createdAt: _date(j['createdAt']),
         expiresAt: _date(j['expiresAt']),
         items: (j['items'] as List? ?? [])

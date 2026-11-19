@@ -4,6 +4,7 @@ import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/event_poster.dart';
+import 'checkout_sheet.dart';
 import 'order_screen.dart';
 
 /// Event page: details, ticket types, quantity selection, order creation.
@@ -29,6 +30,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool get _registrationClosed {
     final close = widget.event.registrationClosingTime;
     return widget.event.isCancelled ||
+        widget.event.suspended ||
         (close != null && DateTime.now().isAfter(close));
   }
 
@@ -37,22 +39,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   int get _count => _qty.values.fold(0, (a, b) => a + b);
 
-  Future<void> _order() async {
+  Future<void> _order(List<TicketType> types) async {
     setState(() => _ordering = true);
     try {
-      final order = await api.createOrder(widget.event.id, _qty);
-      if (!mounted) return;
+      // Attendee name, promo code and price preview, then the order is created.
+      final order = await showCheckoutSheet(context,
+          event: widget.event, quantities: Map.of(_qty), types: types);
+      if (order == null || !mounted) return;
       setState(() => _qty.clear());
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => OrderScreen(order: order)),
       );
       if (mounted) setState(() => _future = api.getTicketTypes(widget.event.id));
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
     } finally {
       if (mounted) setState(() => _ordering = false);
     }
@@ -163,7 +162,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                         Text(
                                           e.isCancelled
                                               ? tr('detail.cancelled')
-                                              : tr('detail.closed'),
+                                              : e.suspended
+                                                  ? tr('detail.suspended')
+                                                  : tr('detail.closed'),
                                           style: TextStyle(color: cs.error),
                                         ),
                                       ],
@@ -231,7 +232,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                               minimumSize: const Size(0, 48),
                               padding: const EdgeInsets.symmetric(horizontal: 24),
                             ),
-                            onPressed: _ordering ? null : _order,
+                            onPressed: _ordering ? null : () => _order(types),
                             child: _ordering
                                 ? const SizedBox(
                                     width: 18,

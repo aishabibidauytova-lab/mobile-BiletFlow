@@ -4,14 +4,17 @@ import '../l10n/l10n.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/language_menu.dart';
+import 'admin_tools_screen.dart';
 import 'admin_users_screen.dart';
 import 'event_selection_screen.dart';
 import 'events_screen.dart';
 import 'login_screen.dart';
 import 'my_orders_screen.dart';
 import 'my_tickets_screen.dart';
+import 'notifications_screen.dart';
 import 'organizer_events_screen.dart';
 import 'profile_screen.dart';
+import 'support_screens.dart';
 
 class _Tab {
   final String id;
@@ -100,6 +103,8 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(tabs[index].title),
         actions: [
+          // Rebuilt with the screen, so the unread count stays fresh.
+          NotificationBell(key: ValueKey('bell-$_current-${_visits[_current] ?? 0}')),
           const LanguageMenu(),
           PopupMenuButton<void>(
             icon: const Icon(Icons.account_circle),
@@ -117,6 +122,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: Text(tr('menu.profile')),
                 ),
               ),
+              PopupMenuItem(
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const SupportListScreen())),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.support_agent),
+                  title: Text(tr('support.title')),
+                ),
+              ),
+              if (AuthService.user?.role == 'PLATFORM_ADMIN')
+                PopupMenuItem(
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const AdminToolsScreen())),
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.admin_panel_settings_outlined),
+                    title: Text(tr('adm.title')),
+                  ),
+                ),
               PopupMenuItem(
                 onTap: _logout,
                 child: ListTile(
