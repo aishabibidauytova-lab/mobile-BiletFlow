@@ -283,7 +283,9 @@ class OutcomeStyle {
       case ScanOutcome.alreadyUsed:
         return OutcomeStyle(const Color(0xFFEF6C00),
             Icons.warning_amber_rounded, tr('scan.out.used'));
-      case ScanOutcome.cancelled:
+      case ScanOutcome.refunded:
+          return OutcomeStyle(const Color(0xFFC62828), Icons.block, tr('order.refunded'));
+        case ScanOutcome.cancelled:
         return OutcomeStyle(
             const Color(0xFFC62828), Icons.cancel, tr('scan.out.cancelled'));
       case ScanOutcome.wrongEvent:

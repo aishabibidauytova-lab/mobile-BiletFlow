@@ -28,6 +28,11 @@ const moreStrings = <String, List<String>>{
 
   // --- Ticket PDF ---
   'ticket.pdf': ['Скачать PDF для печати', 'Download printable PDF', 'Басып шығаруға PDF жүктеу'],
+  'ticket.invalidPdf': ['Сервер не вернул PDF билета.', 'The server did not return a ticket PDF.', 'Сервер билеттің PDF файлын жібермеді.'],
+  'ticket.noPdfActions': ['На этом устройстве недоступны печать и отправка PDF.', 'Printing and sharing PDFs are unavailable on this device.', 'Бұл құрылғыда PDF басып шығару және жіберу қолжетімсіз.'],
+  'ticket.savePdf': ['Скачать файл PDF', 'Download PDF file', 'PDF файлын жүктеу'],
+  'ticket.printPdf': ['Печать', 'Print', 'Басып шығару'],
+  'ticket.sharePdf': ['Поделиться файлом', 'Share file', 'Файлды бөлісу'],
   'ticket.pdfFailed': ['Не удалось открыть PDF', 'Could not open the PDF', 'PDF ашу мүмкін болмады'],
 
   // --- Support ---

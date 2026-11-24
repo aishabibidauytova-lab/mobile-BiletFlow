@@ -38,6 +38,7 @@ IconData _statusIcon(OrderStatus s) => switch (s) {
       OrderStatus.pending => Icons.hourglass_top,
       OrderStatus.paid => Icons.check_circle,
       OrderStatus.cancelled => Icons.cancel,
+      OrderStatus.refunded => Icons.currency_exchange,
       OrderStatus.expired => Icons.timer_off,
     };
 

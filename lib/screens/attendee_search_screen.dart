@@ -68,6 +68,8 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
           _toast(tr('att.checkedIn', {'email': a.attendeeEmail}));
         case ScanOutcome.alreadyUsed:
           _toast(tr('att.alreadyUsed'));
+        case ScanOutcome.refunded:
+          _toast(tr('order.refunded'));
         case ScanOutcome.cancelled:
           _toast(tr('att.cancelled'));
         default:
@@ -116,7 +118,9 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
         return (tr('att.notArrived'), Colors.blueGrey);
       case TicketStatus.used:
         return (tr('att.arrived'), Colors.green.shade700);
-      case TicketStatus.cancelled:
+      case TicketStatus.refunded:
+      return (tr('order.refunded'), Colors.deepOrange);
+    case TicketStatus.cancelled:
         return (tr('ticket.cancelled'), Colors.red.shade700);
     }
   }

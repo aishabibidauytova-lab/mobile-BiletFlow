@@ -174,7 +174,7 @@ class TicketType {
       );
 }
 
-enum OrderStatus { pending, paid, cancelled, expired }
+enum OrderStatus { pending, paid, cancelled, expired, refunded }
 
 class OrderItem {
   final String ticketTypeName;
@@ -239,7 +239,7 @@ class Order {
       );
 }
 
-enum TicketStatus { valid, used, cancelled }
+enum TicketStatus { valid, used, cancelled, refunded }
 
 class Ticket {
   final int id;
@@ -293,6 +293,7 @@ enum ScanOutcome {
   success, // valid ticket, check-in recorded
   alreadyUsed, // ticket already checked in
   cancelled,
+  refunded,
   invalid, // unknown / tampered ticket
   notTicket, // QR is not an admission ticket (e.g. Campaign QR)
   wrongEvent, // ticket belongs to another event
@@ -309,6 +310,7 @@ class ScanResult {
   static const _outcomes = {
     'CHECKED_IN': ScanOutcome.success,
     'ALREADY_USED': ScanOutcome.alreadyUsed,
+    'REFUNDED': ScanOutcome.refunded,
     'CANCELLED': ScanOutcome.cancelled,
     'WRONG_EVENT': ScanOutcome.wrongEvent,
     'INVALID': ScanOutcome.invalid,

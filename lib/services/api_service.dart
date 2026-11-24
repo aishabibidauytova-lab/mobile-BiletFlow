@@ -14,7 +14,8 @@ const String kBaseUrl = 'https://biletflow.duckdns.org/api';
 final BiletFlowApi api = BiletFlowApi();
 
 class BiletFlowApi {
-  final _client = http.Client();
+  final http.Client _client;
+  BiletFlowApi({http.Client? client}) : _client = client ?? http.Client();
   static const _timeout = Duration(seconds: 10);
 
   String? token;
@@ -143,11 +144,37 @@ class BiletFlowApi {
         if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
       }));
 
-  /// Simulated payment (SRS 3.2: no real money moves in the academic MVP).
-  /// [declined] simulates a failed card payment.
-  Future<Order> payOrder(int orderId, {bool declined = false}) async =>
-      Order.fromJson(await _post('/orders/$orderId/pay',
-          declined ? {'simulatedOutcome': 'DECLINED'} : null));
+  Future<Order> startPayment(Order order, {
+    required Future<void> Function(Map<String, dynamic>) openBank,
+    required void Function() onSimulation,
+  }) async {
+    if (order.totalAmount == 0) return payOrder(order.id);
+    final session = await openPaymentSession(order.id);
+    switch (session['provider']) {
+      case 'SIMULATED':
+        onSimulation();
+        return payOrder(order.id);
+      case 'HALYK':
+        await openBank(session);
+        return checkPayment(order.id);
+      default:
+        throw ApiException(tr('bank.invalid'));
+    }
+  }
+
+  Future<Map<String, dynamic>> openPaymentSession(int id) async =>
+      await _post('/orders/$id/payment-session') as Map<String, dynamic>;
+
+  Future<Order> payOrder(int id) async =>
+      Order.fromJson(await _post('/orders/$id/pay'));
+
+  Future<Order> refundOrder(int id, String reason) async =>
+      Order.fromJson(await _post('/orders/$id/refund', {
+        if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+      }));
+
+  Future<List<Map<String, dynamic>>> getRefunds(int id) async =>
+      (await _get('/orders/$id/refunds') as List).cast<Map<String, dynamic>>();
 
   /// Asks the payment provider for the latest status of the order's payment.
   Future<Order> checkPayment(int orderId) async =>
@@ -178,7 +205,13 @@ class BiletFlowApi {
   Uri ticketQrUri(int ticketId) => _uri('/tickets/$ticketId/qr');
 
   /// Print-ready PDF of a ticket (SRS 4.7).
-  Future<List<int>> getTicketPdf(int ticketId) => _getBytes('/tickets/$ticketId/pdf');
+  Future<List<int>> getTicketPdf(int ticketId) async {
+    final bytes = await _getBytes('/tickets/$ticketId/pdf');
+    if (bytes.length < 5 || ascii.decode(bytes.take(5).toList(), allowInvalid: true) != '%PDF-') {
+      throw ApiException(tr('ticket.invalidPdf'));
+    }
+    return bytes;
+  }
 
   Future<List<int>> _getBytes(String path) async {
     try {
