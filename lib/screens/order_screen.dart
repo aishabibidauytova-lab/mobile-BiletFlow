@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../payment/bank_page.dart';
+import '../payment/bank_native.dart' if (dart.library.js_interop) '../payment/bank_web.dart';
 
 import '../l10n/l10n.dart';
 import '../models/models.dart';
@@ -14,6 +17,8 @@ import 'ticket_screen.dart';
       return (tr('order.paid'), Colors.green.shade700);
     case OrderStatus.cancelled:
       return (tr('order.cancelled'), Colors.red.shade700);
+    case OrderStatus.refunded:
+      return (tr('order.refunded'), Colors.deepOrange);
     case OrderStatus.expired:
       return (tr('order.expired'), Colors.blueGrey);
   }
@@ -33,6 +38,39 @@ class _OrderScreenState extends State<OrderScreen> {
   List<Ticket> _tickets = [];
   List<Payment> _payments = const [];
   bool _busy = false;
+  bool _demo = false;
+  int _revision = 0;
+  Timer? _poll;
+  Map<String, dynamic>? _refund;
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _pay() async {
+    if (_busy) return;
+    await _run(() => api.startPayment(_order,
+      onSimulation: () { if (mounted) setState(() => _demo = true); },
+      openBank: (session) async {
+        if (!mounted) return;
+        await openBank(context, BankPage.fromSession(session));
+        if (mounted) _scheduleCheck();
+      },
+    ), null);
+  }
+
+  void _scheduleCheck() {
+    _poll?.cancel();
+    _poll = Timer(const Duration(seconds: 5), () async {
+      if (!mounted || _order.status != OrderStatus.pending) return;
+      if (!_busy) {
+        await _run(() => api.checkPayment(_order.id), null);
+      }
+      if (mounted && _order.status == OrderStatus.pending) _scheduleCheck();
+    });
+  }
 
   @override
   void initState() {
@@ -41,8 +79,19 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _refresh() async {
+    final revision = ++_revision;
     try {
       final o = await api.getOrder(_order.id);
+      if (!mounted || revision != _revision) return;
+      setState(() {
+        _order = o;
+        if (o.status != OrderStatus.paid) _tickets = [];
+      });
+      Map<String, dynamic>? refund;
+      if (o.status == OrderStatus.refunded) {
+        final entries = await api.getRefunds(o.id);
+        if (entries.isNotEmpty) refund = entries.last;
+      }
       final tickets = o.status == OrderStatus.paid
           ? (await api.getMyTickets()).where((t) => t.orderId == o.id).toList()
           : <Ticket>[];
@@ -52,11 +101,11 @@ class _OrderScreenState extends State<OrderScreen> {
       } on ApiException {
         // Free orders have no payments; history is optional.
       }
-      if (mounted) {
+      if (mounted && revision == _revision) {
         setState(() {
-          _order = o;
           _tickets = tickets;
           _payments = payments;
+          _refund = refund;
         });
       }
     } on ApiException catch (e) {
@@ -81,11 +130,14 @@ class _OrderScreenState extends State<OrderScreen> {
     }
   }
 
-  Future<void> _run(Future<Order> Function() action, String done) async {
+  Future<void> _run(Future<Order> Function() action, String? done) async {
+    if (_busy) return;
+    ++_revision;
     setState(() => _busy = true);
     try {
       _order = await action();
-      _toast(done);
+      if (!mounted) return;
+      if (done != null) _toast(done);
       await _refresh();
     } on ApiException catch (e) {
       _toast(e.message);
@@ -156,7 +208,8 @@ class _OrderScreenState extends State<OrderScreen> {
                             OrderStatus.pending => Icons.hourglass_top,
                             OrderStatus.paid => Icons.check_circle,
                             OrderStatus.cancelled => Icons.cancel,
-                            OrderStatus.expired => Icons.timer_off,
+                            OrderStatus.refunded => Icons.currency_exchange,
+      OrderStatus.expired => Icons.timer_off,
                           },
                           color: color,
                         ),
@@ -267,7 +320,7 @@ class _OrderScreenState extends State<OrderScreen> {
                 ),
                 if (o.status == OrderStatus.pending) ...[
                   const SizedBox(height: 14),
-                  if (!free)
+                  if (_demo)
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -289,41 +342,25 @@ class _OrderScreenState extends State<OrderScreen> {
                   const SizedBox(height: 12),
                   FilledButton(
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                    onPressed: _busy
-                        ? null
-                        : () => _run(() => api.payOrder(o.id),
-                            free ? tr('order.confirmedToast') : tr('order.paidToast')),
+                    onPressed: _busy ? null : _pay,
                     child: Text(free ? tr('order.confirm') : tr('order.pay')),
                   ),
-                  if (!free) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _busy
-                                ? null
-                                : () => _run(() => api.payOrder(o.id, declined: true),
-                                    tr('order.declinedToast')),
-                            icon: const Icon(Icons.credit_card_off_outlined),
-                            label: Text(tr('order.simulateDecline')),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _busy
-                                ? null
-                                : () => _run(() => api.checkPayment(o.id),
-                                    tr('order.statusUpdated')),
-                            icon: const Icon(Icons.sync),
-                            label: Text(tr('order.checkPayment')),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : () => _run(() => api.checkPayment(o.id), tr('order.statusUpdated')),
+                    icon: const Icon(Icons.sync),
+                    label: Text(tr('order.checkPayment')),
+                  ),
                 ],
+                if (_refund case final r?) ListTile(
+                  title: Text("${tr('order.refunded')} · ${formatPrice(r['amount'] as num)}"),
+                  subtitle: Text([
+                    tr('refund.${r['status']}'),
+                    if (DateTime.tryParse('${r['completedAt']}') case final date?) formatDateTime(date.toLocal()),
+                    if (r['reason'] != null) r['reason'].toString(),
+                    if (r['failureReason'] != null) r['failureReason'].toString(),
+                    if (r['simulated'] == true) tr('order.simulated'),
+                  ].join(' • ')),
+                ),
                 if (_payments.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text(tr('order.payments'),
@@ -349,7 +386,7 @@ class _OrderScreenState extends State<OrderScreen> {
                       ),
                     ),
                 ],
-                if (o.status == OrderStatus.pending || o.status == OrderStatus.paid)
+                if (o.status == OrderStatus.pending)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: TextButton(

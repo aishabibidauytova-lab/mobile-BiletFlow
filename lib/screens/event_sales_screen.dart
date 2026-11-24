@@ -65,7 +65,7 @@ class _EventSalesScreenState extends State<EventSalesScreen> {
                 );
               },
             ),
-            _OrdersTab(eventId: widget.eventId),
+            _OrdersTab(eventId: widget.eventId, onRefund: () => setState(() => _future = api.getEventSales(widget.eventId))),
           ],
         ),
       ),
@@ -88,6 +88,7 @@ class SalesFiguresGrid extends StatelessWidget {
       (tr('sales.revenue'), formatPrice(f.revenue)),
       (tr('sales.discounts'), formatPrice(f.discounts)),
       (tr('sales.net'), formatPrice(f.netRevenue)),
+      (tr('refund.total'), formatPrice(f.refunds)),
       (tr('sales.fees'), formatPrice(f.processingFees)),
       (tr('sales.payout'), formatPrice(f.estimatedPayout)),
     ];
@@ -229,7 +230,8 @@ class _SalesBody extends StatelessWidget {
 
 class _OrdersTab extends StatefulWidget {
   final int eventId;
-  const _OrdersTab({required this.eventId});
+  final VoidCallback onRefund;
+  const _OrdersTab({required this.eventId, required this.onRefund});
 
   @override
   State<_OrdersTab> createState() => _OrdersTabState();
@@ -246,6 +248,39 @@ class _OrdersTabState extends State<_OrdersTab> {
     _debounce?.cancel();
     _query.dispose();
     super.dispose();
+  }
+
+  final _inProgress = <int>{};
+
+  Future<void> _refund(EventOrder order) async {
+    if (!_inProgress.add(order.id)) return;
+    setState(() {});
+    final label = tr(order.totalAmount == 0 ? 'refund.free' : 'refund.action');
+    var reason = '';
+    try {
+      final confirmed = await showDialog<bool>(context: context, builder: (dialog) =>
+        AlertDialog(title: Text(label), content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(tr('refund.confirm', {'id': order.id, 'amount': formatPrice(order.totalAmount)})),
+          TextField(maxLength: 500, onChanged: (value) => reason = value,
+            decoration: InputDecoration(labelText: tr('refund.reason'))),
+        ]), actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(tr('no'))),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(label)),
+        ]));
+      if (confirmed != true || !mounted) return;
+      await api.refundOrder(order.id, reason);
+      if (!mounted) return;
+      widget.onRefund();
+      await _list.currentState?.reload();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        _reload();
+      }
+    } finally {
+      _inProgress.remove(order.id);
+      if (mounted) setState(() {});
+    }
   }
 
   void _reload() => _list.currentState?.reload();
@@ -306,12 +341,16 @@ class _OrdersTabState extends State<_OrdersTab> {
                   title: Text(o.attendeeName?.isNotEmpty == true
                       ? '${o.attendeeName} · ${o.buyerEmail}'
                       : o.buyerEmail),
-                  subtitle: Text([
+                  subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text([
                     tr('orders.number', {'id': o.id}),
                     tr('orders.ticketsN', {'n': o.ticketCount}),
                     if (o.promoCode != null) '${o.promoCode} −${formatPrice(o.discountAmount)}',
                     if (o.createdAt != null) formatDateTime(o.createdAt!),
                   ].join(' • ')),
+                    if (o.status == OrderStatus.paid) TextButton(
+                      onPressed: _inProgress.contains(o.id) ? null : () => _refund(o),
+                      child: Text(tr(o.totalAmount == 0 ? 'refund.free' : 'refund.action'))),
+                  ]),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end,

@@ -155,6 +155,8 @@ class _EventSelectionScreenState extends State<EventSelectionScreen> {
           _toast(tr('att.checkedIn', {'email': t.attendeeEmail}));
         case ScanOutcome.alreadyUsed:
           _toast(tr('att.alreadyUsed'));
+        case ScanOutcome.refunded:
+          _toast(tr('order.refunded'));
         case ScanOutcome.cancelled:
           _toast(tr('att.cancelled'));
         default:
@@ -485,6 +487,7 @@ class _AttendeeCard extends StatelessWidget {
     final (label, color) = switch (ticket.status) {
       TicketStatus.valid => (tr('att.notArrived'), Colors.blueGrey),
       TicketStatus.used => (tr('att.arrived'), Colors.green.shade700),
+      TicketStatus.refunded => (tr('order.refunded'), Colors.deepOrange),
       TicketStatus.cancelled => (tr('ticket.cancelled'), Colors.red.shade700),
     };
     return Material(

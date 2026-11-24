@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../tickets/pdf_actions.dart' if (dart.library.js_interop) '../tickets/pdf_actions_web.dart';
 import '../widgets/app_background.dart';
 import '../widgets/event_poster.dart';
 import 'support_screens.dart';
@@ -62,6 +63,8 @@ class _TearLine extends StatelessWidget {
       return (tr('ticket.valid'), Colors.green.shade700);
     case TicketStatus.used:
       return (tr('ticket.used'), Colors.blueGrey);
+    case TicketStatus.refunded:
+      return (tr('order.refunded'), Colors.deepOrange);
     case TicketStatus.cancelled:
       return (tr('ticket.cancelled'), Colors.red.shade700);
   }
@@ -78,6 +81,7 @@ class TicketScreen extends StatelessWidget {
     final (label, color) = ticketStatusLabel(t.status);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final accessible = t.status != TicketStatus.refunded && t.status != TicketStatus.cancelled;
     final valid = t.status == TicketStatus.valid;
     final colors = valid
         ? posterPalette(t.eventId)
@@ -147,7 +151,7 @@ class TicketScreen extends StatelessWidget {
                                     switch (t.status) {
                                       TicketStatus.valid => Icons.verified,
                                       TicketStatus.used => Icons.task_alt,
-                                      TicketStatus.cancelled => Icons.block,
+                                      TicketStatus.refunded || TicketStatus.cancelled => Icons.block,
                                     },
                                     size: 16,
                                     color: color,
@@ -167,6 +171,7 @@ class TicketScreen extends StatelessWidget {
                       // Tear line with notches.
                       const _TearLine(background: kBackdropColor),
                       // Body: QR + code.
+                      if (accessible)
                       Container(
                         width: double.infinity,
                         color: cs.surface,
@@ -259,7 +264,7 @@ class TicketScreen extends StatelessWidget {
                         TicketStatus.used => t.usedAt != null
                             ? tr('ticket.hintUsedAt', {'date': formatDateTime(t.usedAt!)})
                             : tr('ticket.hintUsed'),
-                        TicketStatus.cancelled => tr('ticket.hintCancelled'),
+                        TicketStatus.refunded || TicketStatus.cancelled => tr('ticket.hintCancelled'),
                       },
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
@@ -268,7 +273,7 @@ class TicketScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 18),
-              if (t.status != TicketStatus.cancelled) _PdfButton(ticket: t),
+              if (accessible) _PdfButton(ticket: t),
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () => Navigator.push(
@@ -309,10 +314,50 @@ class _PdfButtonState extends State<_PdfButton> {
   Future<void> _download() async {
     setState(() => _loading = true);
     try {
-      final bytes = await api.getTicketPdf(widget.ticket.id);
-      await Printing.sharePdf(
-          bytes: Uint8List.fromList(bytes),
-          filename: 'biletflow-ticket-${widget.ticket.id}.pdf');
+      final bytes = Uint8List.fromList(await api.getTicketPdf(widget.ticket.id));
+      final name = 'biletflow-ticket-${widget.ticket.id}.pdf';
+      final actions = TicketPdfActions(bytes, name);
+      final canShare = await actions.canShare();
+      final canPrint = actions.canDownload || (await Printing.info()).canPrint;
+      if (!mounted) return;
+      if (!actions.canDownload && !canPrint && !canShare) {
+        throw ApiException(tr('ticket.noPdfActions'));
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialog) {
+          // Dispatch from the tap itself to retain the browser's user gesture.
+          void select(Future<void> Function() action) {
+            final result = Future.sync(action);
+            Navigator.pop(dialog);
+            result.catchError((Object _) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(tr('ticket.pdfFailed'))),
+                );
+              }
+            });
+          }
+          final anchor = context.findRenderObject() as RenderBox;
+          final bounds = anchor.localToGlobal(Offset.zero) & anchor.size;
+          return SimpleDialog(title: Text(name), children: [
+            if (actions.canDownload) SimpleDialogOption(
+              onPressed: () => select(actions.download),
+              child: Text(tr('ticket.savePdf')),
+            ),
+            if (canPrint) SimpleDialogOption(
+              onPressed: () => select(() async {
+                await Printing.layoutPdf(name: name, onLayout: (_) async => bytes);
+              }),
+              child: Text(tr('ticket.printPdf')),
+            ),
+            if (canShare) SimpleDialogOption(
+              onPressed: () => select(() => actions.share(bounds)),
+              child: Text(tr('ticket.sharePdf')),
+            ),
+          ]);
+        },
+      );
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

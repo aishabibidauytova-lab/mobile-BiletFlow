@@ -251,6 +251,7 @@ class DailySales {
 
 /// Sales figures for one event, or the totals across events.
 class SalesFigures {
+  final num refunds;
   final int paidOrders;
   final int pendingOrders;
   final int ticketsSold;
@@ -262,6 +263,7 @@ class SalesFigures {
   final num estimatedPayout;
 
   const SalesFigures({
+    this.refunds = 0,
     this.paidOrders = 0,
     this.pendingOrders = 0,
     this.ticketsSold = 0,
@@ -274,6 +276,7 @@ class SalesFigures {
   });
 
   factory SalesFigures.fromJson(Map<String, dynamic> j) => SalesFigures(
+        refunds: _num(j['refunds']),
         paidOrders: _num(j['paidOrders']).toInt(),
         pendingOrders: _num(j['pendingOrders']).toInt(),
         ticketsSold: _num(j['ticketsSold']).toInt(),
