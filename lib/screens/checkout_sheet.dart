@@ -11,26 +11,41 @@ Future<Order?> showCheckoutSheet(
   required EventInfo event,
   required Map<int, int> quantities,
   required List<TicketType> types,
+  List<SelectedSeat> seats = const [],
+  String? promoCode,
 }) =>
     showModalBottomSheet<Order>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _CheckoutSheet(event: event, quantities: quantities, types: types),
+      builder: (_) => _CheckoutSheet(
+          event: event,
+          quantities: quantities,
+          types: types,
+          seats: seats,
+          promoCode: promoCode),
     );
 
 class _CheckoutSheet extends StatefulWidget {
   final EventInfo event;
   final Map<int, int> quantities;
   final List<TicketType> types;
+  final List<SelectedSeat> seats;
+  final String? promoCode;
   const _CheckoutSheet(
-      {required this.event, required this.quantities, required this.types});
+      {required this.event,
+      required this.quantities,
+      required this.types,
+      this.seats = const [],
+      this.promoCode});
 
   @override
   State<_CheckoutSheet> createState() => _CheckoutSheetState();
 }
 
 class _CheckoutSheetState extends State<_CheckoutSheet> {
+  List<int> get _seatIds => [for (final s in widget.seats) s.id];
+
   final _name = TextEditingController();
   final _promo = TextEditingController();
   OrderQuote? _quote;
@@ -43,7 +58,20 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   @override
   void initState() {
     super.initState();
-    _loadQuote();
+    _start();
+  }
+
+  Future<void> _start() async {
+    final code = widget.promoCode;
+    if (code == null) return _loadQuote();
+    _promo.text = code;
+    await _loadQuote(code);
+    // The code may not fit the chosen tickets: still show the regular price.
+    if (mounted && _quote == null) {
+      final error = _promoError;
+      await _loadQuote();
+      if (mounted) setState(() => _promoError = error);
+    }
   }
 
   @override
@@ -59,7 +87,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       _promoError = null;
     });
     try {
-      final q = await api.quoteOrder(widget.event.id, widget.quantities, promoCode: code);
+      final q = await api.quoteOrder(widget.event.id, widget.quantities,
+          seatIds: _seatIds, promoCode: code);
       if (!mounted) return;
       setState(() {
         _quote = q;
@@ -93,7 +122,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     });
     try {
       final order = await api.createOrder(widget.event.id, widget.quantities,
-          attendeeName: _name.text.trim(), promoCode: _appliedCode);
+          seatIds: _seatIds,
+          attendeeName: _name.text.trim(),
+          promoCode: _appliedCode);
       if (mounted) Navigator.pop(context, order);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -131,6 +162,19 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                     children: [
                       Expanded(child: Text('${byId[e.key]!.name} × ${e.value}')),
                       Text(formatPrice(byId[e.key]!.price * e.value)),
+                    ],
+                  ),
+                ),
+            for (final s in widget.seats)
+              if (byId[s.ticketTypeId] != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                          child: Text(
+                              '${byId[s.ticketTypeId]!.name} · ${s.label}')),
+                      Text(formatPrice(byId[s.ticketTypeId]!.price)),
                     ],
                   ),
                 ),
@@ -205,6 +249,12 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
             if (_error != null && q != null) ...[
               const SizedBox(height: 10),
               Text(_error!, style: TextStyle(color: cs.error)),
+            ],
+            if ((widget.event.refundPolicy ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(tr('policy.title'), style: t.labelLarge),
+              Text(widget.event.refundPolicy!.trim(),
+                  style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
             ],
             const SizedBox(height: 18),
             FilledButton(

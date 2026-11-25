@@ -218,6 +218,7 @@ class VerificationRequest {
 // --- Organizer: sales -------------------------------------------------------------
 
 class TicketTypeSales {
+  final int id;
   final String name;
   final num price;
   final int quantity;
@@ -226,7 +227,8 @@ class TicketTypeSales {
   final int available;
   final num revenue;
   const TicketTypeSales(this.name, this.price, this.quantity, this.sold,
-      this.reserved, this.available, this.revenue);
+      this.reserved, this.available, this.revenue,
+      {this.id = 0});
 
   factory TicketTypeSales.fromJson(Map<String, dynamic> j) => TicketTypeSales(
         (j['name'] ?? '') as String,
@@ -236,6 +238,7 @@ class TicketTypeSales {
         _num(j['reserved']).toInt(),
         _num(j['available']).toInt(),
         _num(j['revenue']),
+        id: _num(j['ticketTypeId']).toInt(),
       );
 }
 

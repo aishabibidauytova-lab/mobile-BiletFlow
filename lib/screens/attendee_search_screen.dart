@@ -172,7 +172,7 @@ class _AttendeeSearchScreenState extends State<AttendeeSearchScreen> {
                       final busy = _working.contains(a.id);
                       return ListTile(
                         title: Text(a.attendeeEmail),
-                        subtitle: Text([a.code, a.ticketTypeName].join(' • ')),
+                        subtitle: Text([a.code, a.typeAndSeat].join(' • ')),
                         trailing: busy
                             ? const SizedBox(
                                 width: 24,

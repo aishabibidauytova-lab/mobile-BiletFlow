@@ -30,7 +30,8 @@ class BiletFlowApi {
       {'Content-Type': 'application/json', ...authHeaders};
 
   Uri _uri(String path, [Map<String, String>? query]) =>
-      Uri.parse('$kBaseUrl$path').replace(queryParameters: query);
+      Uri.parse('$kBaseUrl$path').replace(
+          queryParameters: query == null || query.isEmpty ? null : query);
 
   Future<dynamic> _send(Future<http.Response> Function() call) async {
     try {
@@ -47,7 +48,8 @@ class BiletFlowApi {
       }
       if (res.statusCode >= 400) {
         throw ApiException(
-            _message(body) ?? tr('api.server', {'code': res.statusCode}));
+            _message(body) ?? tr('api.server', {'code': res.statusCode}),
+            status: res.statusCode);
       }
       return body;
     } on TimeoutException {
@@ -124,11 +126,15 @@ class BiletFlowApi {
           if (e.value > 0) {'ticketTypeId': e.key, 'quantity': e.value},
       ];
 
+  /// [quantities] are tickets sold by count; [seatIds] are chosen seats.
   Future<Order> createOrder(int eventId, Map<int, int> quantities,
-      {String? attendeeName, String? promoCode}) async {
+      {List<int> seatIds = const [],
+      String? attendeeName,
+      String? promoCode}) async {
     final b = await _post('/orders', {
       'eventId': eventId,
       'items': _items(quantities),
+      if (seatIds.isNotEmpty) 'seatIds': seatIds,
       if (attendeeName != null && attendeeName.isNotEmpty) 'attendeeName': attendeeName,
       if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
     });
@@ -137,10 +143,11 @@ class BiletFlowApi {
 
   /// Price preview with the promo code applied (the server calculates discounts).
   Future<OrderQuote> quoteOrder(int eventId, Map<int, int> quantities,
-          {String? promoCode}) async =>
+          {List<int> seatIds = const [], String? promoCode}) async =>
       OrderQuote.fromJson(await _post('/orders/quote', {
         'eventId': eventId,
         'items': _items(quantities),
+        if (seatIds.isNotEmpty) 'seatIds': seatIds,
         if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
       }));
 
@@ -213,10 +220,10 @@ class BiletFlowApi {
     return bytes;
   }
 
-  Future<List<int>> _getBytes(String path) async {
+  Future<List<int>> _getBytes(String path, [Map<String, String>? query]) async {
     try {
       final res = await _client
-          .get(_uri(path), headers: authHeaders)
+          .get(_uri(path, query), headers: authHeaders)
           .timeout(const Duration(seconds: 30));
       if (res.statusCode >= 400) {
         final body = _tryJson(utf8.decode(res.bodyBytes, allowMalformed: true));
@@ -545,13 +552,184 @@ class BiletFlowApi {
   Future<OrganizerProfile> requestVerification() async =>
       OrganizerProfile.fromJson(await _post('/organizers/profile/verification'));
 
+  // --- Organizer: event phases, attendance, history -----------------------------
+
+  /// The signed-in organizer's events. [phase]: UPCOMING, ACTIVE, COMPLETED
+  /// or CANCELLED (null = all).
+  Future<List<EventInfo>> getOrganizerEvents({String? phase}) async {
+    final b = await _get('/organizer/events', {..._pageAll, 'phase': ?phase});
+    return PageResult.fromJson(b, EventInfo.fromJson).items;
+  }
+
+  Future<Attendance> getAttendance(int eventId, {int? ticketTypeId}) async =>
+      Attendance.fromJson(await _get('/organizer/events/$eventId/attendance', {
+        if (ticketTypeId != null) 'ticketTypeId': '$ticketTypeId',
+      }));
+
+  /// Activity timeline of one event (SRS 4.16).
+  Future<PageResult<HistoryEntry>> getEventHistory(
+    int eventId, {
+    DateTime? from,
+    DateTime? to,
+    String? action,
+    String? entityType,
+    int page = 0,
+  }) async =>
+      PageResult.fromJson(
+          await _get('/organizer/events/$eventId/history', {
+            'page': '$page',
+            'size': '50',
+            if (from != null) 'from': isoDate(from),
+            if (to != null) 'to': isoDate(to),
+            'action': ?action,
+            'entityType': ?entityType,
+          }),
+          HistoryEntry.fromJson);
+
+  // --- Campaign links and event reports -----------------------------------------
+
+  /// Resolves a campaign link value, which is either a link token or a promo code.
+  Future<PromoPreview> previewPromo(int eventId, String value) async {
+    Future<PromoPreview> by(String key) async => PromoPreview.fromJson(
+        await _get('/events/$eventId/promo', {key: value}));
+    try {
+      return await by('token');
+    } on ApiException catch (e) {
+      if (e.status != 400) rethrow;
+      return by('code');
+    }
+  }
+
+  Future<void> reportEvent(int eventId, String reason, String message) =>
+      _post('/events/$eventId/reports', {
+        'reason': reason,
+        if (message.trim().isNotEmpty) 'message': message.trim(),
+      });
+
+  // --- Platform admin: search, monitoring, reports, settings --------------------
+
+  Future<PageResult<T>> _adminSearch<T>(
+    String path,
+    T Function(Map<String, dynamic>) parse,
+    Map<String, String?> filters,
+  ) async =>
+      PageResult.fromJson(
+          await _get('/admin/$path', {
+            ..._pageAll,
+            for (final f in filters.entries)
+              if (f.value != null && f.value!.trim().isNotEmpty)
+                f.key: f.value!.trim(),
+          }),
+          parse);
+
+  Future<PageResult<EventInfo>> searchAdminEvents(
+          {String? query, bool? suspended}) =>
+      _adminSearch('events', EventInfo.fromJson,
+          {'q': query, 'suspended': suspended?.toString()});
+
+  Future<PageResult<AdminOrder>> searchAdminOrders(
+          {String? query, String? status}) =>
+      _adminSearch(
+          'orders', AdminOrder.fromJson, {'q': query, 'status': status});
+
+  Future<PageResult<AdminTransaction>> searchAdminPayments(
+          {String? query, String? status}) =>
+      _adminSearch('payments', AdminTransaction.fromJson,
+          {'q': query, 'status': status});
+
+  Future<PageResult<AdminTransaction>> searchAdminRefunds(
+          {String? query, String? status}) =>
+      _adminSearch('refunds', AdminTransaction.fromJson,
+          {'q': query, 'status': status});
+
+  Future<PageResult<EventReport>> getEventReports({String? status}) =>
+      _adminSearch('event-reports', EventReport.fromJson, {'status': status});
+
+  /// [outcome]: DISMISSED or ACTIONED.
+  Future<void> reviewEventReport(int id, String outcome, String note) =>
+      _post('/admin/event-reports/$id/review', {
+        'outcome': outcome,
+        if (note.trim().isNotEmpty) 'note': note.trim(),
+      });
+
+  Future<PlatformSettings> getPlatformSettings() async =>
+      PlatformSettings.fromJson(await _get('/admin/settings'));
+
+  Future<PlatformSettings> savePlatformSettings(
+          num activationFee, num processingPercent) async =>
+      PlatformSettings.fromJson(await _put('/admin/settings', {
+        'activationFeeKzt': activationFee,
+        'processingFeePercent': processingPercent,
+      }));
+
+  /// CSV report: [kind] is events, payments or payouts.
+  Future<List<int>> getReportCsv(String kind, {DateTime? from, DateTime? to}) =>
+      _getBytes('/admin/reports/$kind.csv', {
+        if (from != null) 'from': isoDate(from),
+        if (to != null) 'to': isoDate(to),
+      });
+
+  // --- Seat maps (SRS 4.3.1) ----------------------------------------------------
+
+  /// What attendees see.
+  Future<SeatMap> getSeatMap(int eventId) async =>
+      SeatMap.fromJson(await _get('/events/$eventId/seat-map'));
+
+  Future<List<Seat>> getSectionSeats(int eventId, int sectionId) async {
+    final b = await _get('/events/$eventId/seat-map/sections/$sectionId');
+    return (b['seats'] as List? ?? [])
+        .map((e) => Seat.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Organizer's view of the seating configuration.
+  Future<SeatMap> getSeating(int eventId) async =>
+      SeatMap.fromJson(await _get('/events/$eventId/seating'));
+
+  Future<void> setSeatingMode(int eventId, {required bool assigned}) =>
+      _put('/events/$eventId/seating',
+          {'mode': assigned ? 'ASSIGNED' : 'GENERAL_ADMISSION'});
+
+  /// A null [ticketTypeId] takes the section off sale.
+  Future<void> assignSection(int eventId, int sectionId, int? ticketTypeId) =>
+      _put('/events/$eventId/seating/sections/$sectionId',
+          {'ticketTypeId': ticketTypeId});
+
+  Future<void> blockSeats(int eventId, List<int> seatIds, bool blocked) => _put(
+      '/events/$eventId/seating/seats',
+      {'seatIds': seatIds, 'blocked': blocked});
+
+  Future<List<SeatingLayout>> getSeatingLayouts() async =>
+      (await _get('/venues/seating-layouts') as List)
+          .map((e) => SeatingLayout.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+  /// Admin: gives a venue a seating plan, or removes it (null).
+  Future<void> setVenueLayout(int venueId, String? layout) =>
+      _put('/venues/$venueId/seating-layout', {'seatingLayout': layout});
+
+  // --- Calendar export (SRS 4.11) -----------------------------------------------
+
+  Future<CalendarLinks> getCalendarLinks(int eventId) async =>
+      CalendarLinks.fromJson(await _get('/events/$eventId/calendar'));
+
+  Future<List<int>> getCalendarFile(int eventId) =>
+      _getBytes('/events/$eventId/calendar.ics');
+
   // --- Organizer: sales -----------------------------------------------------------
 
   Future<SalesSummary> getSalesSummary() async =>
       SalesSummary.fromJson(await _get('/organizer/sales/events'));
 
-  Future<EventSales> getEventSales(int eventId) async =>
-      EventSales.fromJson(await _get('/organizer/events/$eventId/sales'));
+  /// [from], [to] and [ticketTypeId] narrow only `salesByDay`; the server
+  /// always calculates the totals over the whole event.
+  Future<EventSales> getEventSales(int eventId,
+          {DateTime? from, DateTime? to, int? ticketTypeId}) async =>
+      EventSales.fromJson(await _get('/organizer/events/$eventId/sales', {
+        if (from != null) 'from': isoDate(from),
+        if (to != null) 'to': isoDate(to),
+        if (ticketTypeId != null) 'ticketTypeId': '$ticketTypeId',
+      }));
 
   Future<List<EventOrder>> getEventOrders(int eventId, {String? status, String? query}) async {
     final b = await _get('/organizer/events/$eventId/orders', {

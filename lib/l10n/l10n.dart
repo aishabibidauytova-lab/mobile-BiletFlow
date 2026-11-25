@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'l10n_more.dart';
+import 'l10n_srs.dart';
 
 /// Supported UI languages. The order matches the lists in [_strings]:
 /// [ru, en, kk].
@@ -48,7 +49,9 @@ class L10n extends ChangeNotifier {
 /// Translates [key] into the current language. `{name}` placeholders are
 /// replaced from [args]. Unknown keys are returned as-is.
 String tr(String key, [Map<String, Object?> args = const {}]) {
-  var s = (_strings[key] ?? moreStrings[key])?[l10n.lang.index] ?? key;
+  var s = (_strings[key] ?? moreStrings[key] ?? srsStrings[key])
+          ?[l10n.lang.index] ??
+      key;
   args.forEach((k, v) => s = s.replaceAll('{$k}', '$v'));
   return s;
 }
