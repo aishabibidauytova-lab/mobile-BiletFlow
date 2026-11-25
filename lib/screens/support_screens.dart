@@ -10,7 +10,8 @@ import '../widgets/async_list.dart';
 class SupportListScreen extends StatefulWidget {
   /// Platform admin view of cases escalated by organizers.
   final bool escalatedOnly;
-  const SupportListScreen({super.key, this.escalatedOnly = false});
+  final bool embedded;
+  const SupportListScreen({super.key, this.escalatedOnly = false, this.embedded = false});
 
   @override
   State<SupportListScreen> createState() => _SupportListScreenState();
@@ -53,7 +54,7 @@ class _SupportListScreenState extends State<SupportListScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
+      appBar: widget.embedded ? null : AppBar(
           title: Text(widget.escalatedOnly ? tr('support.escalatedTitle') : tr('support.title'))),
       floatingActionButton: widget.escalatedOnly
           ? null

@@ -8,6 +8,7 @@ import '../widgets/async_list.dart';
 import 'event_form_screen.dart';
 import 'event_sales_screen.dart';
 import 'manage_event_screen.dart';
+import 'support_screens.dart';
 
 Color eventStatusColor(String status) => switch (status) {
       'PUBLISHED' => Colors.green.shade700,
@@ -15,8 +16,7 @@ Color eventStatusColor(String status) => switch (status) {
       _ => Colors.orange.shade800,
     };
 
-/// Organizer cabinet (mirrors the website): My events, Create, Management and
-/// Sales sections.
+/// Organizer cabinet with event management, sales and support.
 class OrganizerEventsScreen extends StatefulWidget {
   const OrganizerEventsScreen({super.key});
 
@@ -72,6 +72,7 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
       tr('org.tab.create'),
       tr('org.tab.manage'),
       tr('org.tab.sales'),
+      tr('support.title'),
     ];
 
     Widget body;
@@ -83,6 +84,8 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
           child: EventForm(key: _formKey, onSaved: _onCreated, showReset: true),
         ),
       );
+    } else if (_tab == 4) {
+      body = const SupportListScreen(embedded: true);
     } else {
       body = FutureBuilder<List<EventInfo>>(
         future: _future,
@@ -140,26 +143,22 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
                 ],
               ),
             ),
-            SizedBox(
-              height: 56,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+              child: Wrap(
+                spacing: 8,
                 children: [
                   for (var i = 0; i < tabs.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(tabs[i]),
-                        selected: _tab == i,
-                        showCheckmark: false,
-                        selectedColor: cs.primary,
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: _tab == i ? cs.onPrimary : cs.onSurface,
-                        ),
-                        onSelected: (_) => setState(() => _tab = i),
+                    ChoiceChip(
+                      label: Text(tabs[i]),
+                      selected: _tab == i,
+                      showCheckmark: false,
+                      selectedColor: cs.primary,
+                      labelStyle: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: _tab == i ? cs.onPrimary : cs.onSurface,
                       ),
+                      onSelected: (_) => setState(() => _tab = i),
                     ),
                 ],
               ),

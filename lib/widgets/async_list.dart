@@ -31,7 +31,10 @@ class AsyncListState<T> extends State<AsyncList<T>> {
   }
 
   Future<void> reload() {
-    setState(() => _future = widget.load());
+    final future = widget.load();
+    setState(() {
+      _future = future;
+    });
     return _future.then((_) {}, onError: (_) {});
   }
 
