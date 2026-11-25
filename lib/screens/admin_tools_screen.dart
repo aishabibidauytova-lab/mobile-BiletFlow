@@ -15,32 +15,25 @@ class AdminToolsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text(tr('adm.title')),
-          actions: [
-            TextButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const SupportListScreen(escalatedOnly: true)),
-              ),
-              icon: const Icon(Icons.priority_high),
-              label: Text(tr('adm.escalated')),
-            ),
-          ],
           bottom: TabBar(
             isScrollable: true,
             tabs: [
               Tab(text: tr('adm.verification')),
               Tab(text: tr('adm.activations')),
               Tab(text: tr('adm.events')),
+              Tab(text: tr('adm.escalated')),
             ],
           ),
         ),
         body: const TabBarView(
-          children: [_VerificationTab(), _ActivationsTab(), _EventsTab()],
+          children: [
+            _VerificationTab(), _ActivationsTab(), _EventsTab(),
+            SupportListScreen(escalatedOnly: true, embedded: true),
+          ],
         ),
       ),
     );
