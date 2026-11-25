@@ -113,6 +113,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool get _registrationClosed {
     final close = widget.event.registrationClosingTime;
     return widget.event.isCancelled ||
+        widget.event.isOver ||
         widget.event.suspended ||
         (close != null && DateTime.now().isAfter(close));
   }
@@ -165,7 +166,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     SliverAppBar(
                       pinned: true,
                       expandedHeight: 280,
-                      backgroundColor: cs.surface,
+                      backgroundColor: posterPalette(e.id, e.category).first,
                       foregroundColor: Colors.white,
                       iconTheme: const IconThemeData(color: Colors.white),
                       actions: [

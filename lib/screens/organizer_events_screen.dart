@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/async_list.dart';
 import '../widgets/attendance_view.dart';
+import '../widgets/scrolling.dart';
 import 'event_detail_screen.dart';
 import 'event_form_screen.dart';
 import 'event_sales_screen.dart';
@@ -292,8 +293,7 @@ class _MineTab extends StatelessWidget {
         child: Column(children: [
         SizedBox(
           height: 48,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
+          child: HorizontalStrip(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
             children: [
               for (final p in [null, ...eventPhases])

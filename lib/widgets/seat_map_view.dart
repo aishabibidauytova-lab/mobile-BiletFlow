@@ -50,8 +50,9 @@ class HallPlan extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
-      // Fit the width, but never take more than a bit of the screen height.
-      final scale = math.min(box.maxWidth / map.width, 340 / map.height);
+      // Fit the width, within the height the screen leaves for the plan.
+      final scale = math.min(box.maxWidth / map.width,
+          math.min(box.maxHeight, 340) / map.height);
       return Center(
         child: SizedBox(
           width: map.width * scale,
@@ -139,7 +140,8 @@ class _HallPainter extends CustomPainter {
             s.price == null ? '—' : formatPrice(s.price!),
           ].join('\n'),
           r.center,
-          math.min(11, r.height / 3),
+          // Narrow sections get smaller text, so prices are not cut off.
+          math.min(11, math.min(r.height / 3, r.width / 4.8)),
           isActive ? cs.onPrimary : Colors.black87,
           maxWidth: r.width);
     }
@@ -263,7 +265,8 @@ class _Geometry {
   }
 }
 
-/// The seats of one section. Drag to move, pinch or scroll to zoom.
+/// The seats of one section. Drag to move; pinch, scroll or use the buttons to
+/// zoom.
 class SeatGrid extends StatefulWidget {
   static const double spacing = 32;
 
@@ -284,7 +287,30 @@ class SeatGrid extends StatefulWidget {
 }
 
 class _SeatGridState extends State<SeatGrid> {
+  static const _minScale = 0.2;
+  static const _maxScale = 2.0;
+
   late _Geometry _geometry = _Geometry(widget.seats);
+  final _view = TransformationController();
+  Size _viewport = Size.zero;
+
+  @override
+  void dispose() {
+    _view.dispose();
+    super.dispose();
+  }
+
+  /// Zooms around the middle of what is on screen.
+  void _zoom(double factor) {
+    final scale = _view.value.getMaxScaleOnAxis();
+    final next = (scale * factor).clamp(_minScale, _maxScale);
+    final center = _viewport.center(Offset.zero);
+    final scene = _view.toScene(center);
+    _view.value = Matrix4.identity()
+      ..translateByDouble(center.dx - scene.dx * next,
+          center.dy - scene.dy * next, 0, 1)
+      ..scaleByDouble(next, next, next, 1);
+  }
 
   @override
   void didUpdateWidget(SeatGrid old) {
@@ -309,21 +335,49 @@ class _SeatGridState extends State<SeatGrid> {
     if (widget.seats.isEmpty) {
       return Center(child: Text(tr('seat.none')));
     }
-    return InteractiveViewer(
-      constrained: false,
-      minScale: 0.25,
-      maxScale: 2,
-      boundaryMargin: const EdgeInsets.all(120),
-      child: GestureDetector(
-        onTapUp: (d) => _tap(d.localPosition),
-        child: CustomPaint(
-          size: _geometry.size,
-          painter: _SeatPainter(widget.seats, _geometry,
-              Set.of(widget.selected), widget.enabled, widget.onTap,
-              Theme.of(context).colorScheme),
-        ),
-      ),
-    );
+    return LayoutBuilder(builder: (context, box) {
+      _viewport = box.biggest;
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: InteractiveViewer(
+              transformationController: _view,
+              constrained: false,
+              minScale: _minScale,
+              maxScale: _maxScale,
+              boundaryMargin: const EdgeInsets.all(120),
+              child: GestureDetector(
+                onTapUp: (d) => _tap(d.localPosition),
+                child: CustomPaint(
+                  size: _geometry.size,
+                  painter: _SeatPainter(widget.seats, _geometry,
+                      Set.of(widget.selected), widget.enabled, widget.onTap,
+                      Theme.of(context).colorScheme),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Column(
+              children: [
+                IconButton.filledTonal(
+                  tooltip: tr('seat.zoomIn'),
+                  onPressed: () => _zoom(1.4),
+                  icon: const Icon(Icons.zoom_in),
+                ),
+                IconButton.filledTonal(
+                  tooltip: tr('seat.zoomOut'),
+                  onPressed: () => _zoom(1 / 1.4),
+                  icon: const Icon(Icons.zoom_out),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    });
   }
 }
 

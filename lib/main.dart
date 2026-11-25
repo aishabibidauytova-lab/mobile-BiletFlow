@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'l10n/l10n.dart';
 import 'widgets/app_background.dart';
+import 'widgets/scrolling.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/api_service.dart';
@@ -100,6 +101,7 @@ class BiletFlowApp extends StatelessWidget {
         title: 'BiletFlow',
         debugShowCheckedModeBanner: false,
         theme: _buildTheme(),
+        scrollBehavior: const AppScrollBehavior(),
         locale: Locale(l10n.lang.code),
         supportedLocales: [for (final l in AppLang.values) Locale(l.code)],
         localizationsDelegates: const [

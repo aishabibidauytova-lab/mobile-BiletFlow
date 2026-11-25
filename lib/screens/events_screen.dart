@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/campaign_link.dart';
 import '../widgets/event_poster.dart';
+import '../widgets/scrolling.dart';
 import 'campaign_scan_screen.dart';
 import 'event_detail_screen.dart';
 
@@ -31,7 +32,9 @@ class _EventsScreenState extends State<EventsScreen> {
 
   Future<List<EventInfo>> _load() async {
     final events = await api.getEvents();
-    return events.where((e) => e.status == 'PUBLISHED').toList();
+    return events.where((e) => e.status == 'PUBLISHED' && !e.isOver).toList()
+      ..sort((a, b) => (a.startTime ?? DateTime(9999))
+          .compareTo(b.startTime ?? DateTime(9999)));
   }
 
   Future<void> _reload() async {
@@ -259,8 +262,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
     return SizedBox(
       height: 52,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+      child: HorizontalStrip(
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
         children: [
           tab(tr('events.all'), null, Icons.apps),
@@ -316,8 +318,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
     return SizedBox(
       height: 84,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+      child: HorizontalStrip(
         padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
         children: [
           for (var i = 0; i < days.length; i++) chip(days[i], i),

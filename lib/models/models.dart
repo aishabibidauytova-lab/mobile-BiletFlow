@@ -104,6 +104,14 @@ class EventInfo {
 
   bool get isCancelled => status == 'CANCELLED';
 
+  /// The event has finished. The server's phase wins over the device clock,
+  /// which may be in another time zone than the event.
+  bool get isOver {
+    if (phase != null) return phase == 'COMPLETED';
+    final end = endTime ?? startTime;
+    return end != null && end.isBefore(DateTime.now());
+  }
+
   /// "04.11.2026 15:00 • Demo Concert Hall"
   String get subtitle => [
         if (startTime != null) formatDateTime(startTime!),
