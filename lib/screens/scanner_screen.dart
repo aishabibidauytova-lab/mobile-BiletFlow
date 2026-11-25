@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/scan_gate.dart';
 import 'attendee_search_screen.dart';
 
 class ScannerScreen extends StatefulWidget {
@@ -20,9 +21,13 @@ class ScannerScreen extends StatefulWidget {
 
 class _ScannerScreenState extends State<ScannerScreen> {
   final MobileScannerController _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
+    // Repeated readings are filtered by [_gate]. The scanner's own
+    // `noDuplicates` would never report the same ticket a second time.
+    detectionSpeed: DetectionSpeed.normal,
+    detectionTimeoutMs: 300,
     formats: const [BarcodeFormat.qrCode],
   );
+  final _gate = ScanGate();
 
   EventStats _stats = const EventStats(0, 0);
   ScanResult? _result;
@@ -53,9 +58,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_busy) return;
     final raw = capture.barcodes.isEmpty ? null : capture.barcodes.first.rawValue;
     if (raw == null || raw.isEmpty) return;
+    if (!_gate.accept(raw, busy: _busy)) return;
 
     _busy = true;
     _dismissTimer?.cancel();
@@ -92,8 +97,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
       _result = null;
       _busy = false;
     });
-    // Allow re-scanning the same code after the result is dismissed.
-    _controller.start();
   }
 
   Future<void> _undo() async {
@@ -363,7 +366,7 @@ class _ResultPanel extends StatelessWidget {
                 Text(t.attendeeEmail,
                     style: const TextStyle(color: Colors.white, fontSize: 18)),
                 Text(
-                  [t.ticketTypeName, t.code].join(' • '),
+                  [t.typeAndSeat, t.code].join(' • '),
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],

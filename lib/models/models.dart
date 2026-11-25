@@ -3,6 +3,8 @@
 import '../l10n/l10n.dart';
 
 part 'more_models.dart';
+part 'seating_models.dart';
+part 'srs_models.dart';
 
 DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse(v as String);
 
@@ -42,13 +44,16 @@ class Venue {
   final String name;
   final String address;
   final int? capacity;
-  const Venue(this.name, this.address, {this.id = 0, this.capacity});
+  final String? seatingLayout;
+  const Venue(this.name, this.address,
+      {this.id = 0, this.capacity, this.seatingLayout});
 
   factory Venue.fromJson(Map<String, dynamic> j) => Venue(
         (j['name'] ?? '') as String,
         (j['address'] ?? '') as String,
         id: _num(j['id']).toInt(),
         capacity: j['capacity'] == null ? null : _num(j['capacity']).toInt(),
+        seatingLayout: j['seatingLayout'] as String?,
       );
 }
 
@@ -70,6 +75,9 @@ class EventInfo {
   final bool paidSalesActive;
   final bool suspended;
   final String? suspensionReason;
+  final String? phase; // UPCOMING, ACTIVE, COMPLETED, CANCELLED
+  final String? refundPolicy;
+  final bool assignedSeating;
 
   const EventInfo({
     required this.id,
@@ -89,6 +97,9 @@ class EventInfo {
     this.paidSalesActive = false,
     this.suspended = false,
     this.suspensionReason,
+    this.phase,
+    this.refundPolicy,
+    this.assignedSeating = false,
   });
 
   bool get isCancelled => status == 'CANCELLED';
@@ -117,6 +128,9 @@ class EventInfo {
         paidSalesActive: (j['paidSalesActive'] ?? false) as bool,
         suspended: (j['suspended'] ?? false) as bool,
         suspensionReason: j['suspensionReason'] as String?,
+        phase: j['phase'] as String?,
+        refundPolicy: j['refundPolicy'] as String?,
+        assignedSeating: j['seatingMode'] == 'ASSIGNED',
         venue: j['venue'] != null
             ? Venue.fromJson(j['venue'] as Map<String, dynamic>)
             : null,
@@ -180,12 +194,19 @@ class OrderItem {
   final String ticketTypeName;
   final int quantity;
   final num unitPrice;
-  const OrderItem(this.ticketTypeName, this.quantity, this.unitPrice);
+  final String? seat;
+  const OrderItem(this.ticketTypeName, this.quantity, this.unitPrice,
+      {this.seat});
 
   factory OrderItem.fromJson(Map<String, dynamic> j) => OrderItem(
         (j['ticketTypeName'] ?? '') as String,
         _num(j['quantity']).toInt(),
         _num(j['unitPrice']),
+        seat: seatDescription(
+            j['sectionName'] as String?,
+            j['rowLabel'] as String?,
+            _optInt(j['seatNumber']),
+            j['seatLabel'] as String?),
       );
 }
 
@@ -251,6 +272,8 @@ class Ticket {
   final String ticketTypeName;
   final String attendeeEmail;
   final DateTime? usedAt;
+  final String? attendeeName;
+  final String? seat;
 
   const Ticket({
     required this.id,
@@ -262,7 +285,12 @@ class Ticket {
     required this.ticketTypeName,
     required this.attendeeEmail,
     this.usedAt,
+    this.attendeeName,
+    this.seat,
   });
+
+  /// Ticket type, followed by the seat when there is one.
+  String get typeAndSeat => [ticketTypeName, ?seat].join(' • ');
 
   factory Ticket.fromJson(Map<String, dynamic> j) => Ticket(
         id: j['id'] as int,
@@ -277,6 +305,12 @@ class Ticket {
         ticketTypeName: (j['ticketTypeName'] ?? '') as String,
         attendeeEmail: (j['attendeeEmail'] ?? '') as String,
         usedAt: _date(j['usedAt']),
+        attendeeName: j['attendeeName'] as String?,
+        seat: seatDescription(
+            j['sectionName'] as String?,
+            j['rowLabel'] as String?,
+            _optInt(j['seatNumber']),
+            j['seatLabel'] as String?),
       );
 }
 
@@ -329,7 +363,8 @@ class ScanResult {
 class ApiException implements Exception {
   final String message;
   final bool unauthorized;
-  ApiException(this.message, {this.unauthorized = false});
+  final int? status;
+  ApiException(this.message, {this.unauthorized = false, this.status});
   @override
   String toString() => message;
 }

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/campaign_link.dart';
 import '../widgets/event_poster.dart';
+import 'campaign_scan_screen.dart';
 import 'event_detail_screen.dart';
 
 /// Public event catalog: search, category tabs, date strip, a featured banner
@@ -103,6 +105,15 @@ class _EventsScreenState extends State<EventsScreen> {
       lastDate: DateTime(now.year + 2),
     );
     if (d != null) setState(() => _date = d);
+  }
+
+  /// The home screen opens the scanned event, with its promo code.
+  Future<void> _scanCampaign() async {
+    final link = await Navigator.push<CampaignLink>(
+      context,
+      MaterialPageRoute(builder: (_) => const CampaignScanScreen()),
+    );
+    if (link != null) DeepLinks.pending.value = link;
   }
 
   /// Nearest upcoming event, shown as the featured banner.
@@ -211,6 +222,11 @@ class _EventsScreenState extends State<EventsScreen> {
                   _query = '';
                 }),
               ),
+            IconButton(
+              tooltip: tr('link.scan'),
+              icon: const Icon(Icons.qr_code_scanner),
+              onPressed: _scanCampaign,
+            ),
           ],
         ),
       );

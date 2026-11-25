@@ -447,7 +447,7 @@ class _ResultBanner extends StatelessWidget {
           if (tk != null) ...[
             Text(tk.attendeeEmail,
                 style: const TextStyle(color: Colors.white, fontSize: 16)),
-            Text([tk.ticketTypeName, tk.code].join(' • '),
+            Text([tk.typeAndSeat, tk.code].join(' • '),
                 style: const TextStyle(color: Colors.white70)),
           ],
           if (result.outcome == ScanOutcome.alreadyUsed && usedTime != null)
@@ -510,7 +510,7 @@ class _AttendeeCard extends StatelessWidget {
                       style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 2),
                   Text(
-                    '${ticket.ticketTypeName} · ${tr('ticket.number', {'id': ticket.id})}',
+                    '${ticket.typeAndSeat} · ${tr('ticket.number', {'id': ticket.id})}',
                     style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 6),

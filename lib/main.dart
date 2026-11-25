@@ -7,12 +7,14 @@ import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'services/campaign_link.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await l10n.load();
+  DeepLinks.start();
   api.onUnauthorized = () async {
     await AuthService.logout();
     navigatorKey.currentState?.pushAndRemoveUntil(
@@ -83,6 +85,9 @@ ThemeData _buildTheme() {
   );
 }
 
+Route<void> _startRoute(RouteSettings settings) => MaterialPageRoute(
+    settings: settings, builder: (_) => const AuthGate());
+
 class BiletFlowApp extends StatelessWidget {
   const BiletFlowApp({super.key});
   @override
@@ -108,7 +113,10 @@ class BiletFlowApp extends StatelessWidget {
           key: ValueKey(l10n.lang),
           child: AppBackground(child: child!),
         ),
-        home: const AuthGate(),
+        // No `home`: a link that launches the app arrives as the initial route
+        // name. [DeepLinks] handles it, so every start shows the same page.
+        onGenerateRoute: _startRoute,
+        onGenerateInitialRoutes: (_) => [_startRoute(const RouteSettings())],
       ),
     );
   }

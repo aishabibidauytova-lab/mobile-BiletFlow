@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../tickets/pdf_actions.dart' if (dart.library.js_interop) '../tickets/pdf_actions_web.dart';
 import '../widgets/app_background.dart';
+import '../widgets/calendar_button.dart';
 import '../widgets/event_poster.dart';
 import 'support_screens.dart';
 
@@ -71,13 +72,40 @@ class _TearLine extends StatelessWidget {
 }
 
 /// A single ticket with its server-generated QR code, shown at the entrance.
-class TicketScreen extends StatelessWidget {
+class TicketScreen extends StatefulWidget {
   final Ticket ticket;
   const TicketScreen({super.key, required this.ticket});
 
   @override
+  State<TicketScreen> createState() => _TicketScreenState();
+}
+
+class _TicketScreenState extends State<TicketScreen> {
+  /// Date and venue come from the event; null while loading or unavailable.
+  EventInfo? _event;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvent();
+  }
+
+  Future<void> _loadEvent() async {
+    try {
+      final e = await api.getEvent(widget.ticket.eventId);
+      if (mounted) setState(() => _event = e);
+    } on ApiException {
+      // The ticket and its QR code stay usable without these details.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final t = ticket;
+    final t = widget.ticket;
+    final start = _event?.startTime;
+    final venue = _event?.venue;
+    final name = (t.attendeeName ?? '').trim();
+    final attendee = name.isNotEmpty ? name : t.attendeeEmail;
     final (label, color) = ticketStatusLabel(t.status);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -165,6 +193,32 @@ class TicketScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+                      // Date, venue and attendee (SRS 4.7).
+                      Container(
+                        width: double.infinity,
+                        color: cs.surface,
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                        child: Column(
+                          children: [
+                            if (start != null)
+                              _Detail(Icons.event, tr('ticket.date'),
+                                  formatDateTime(start)),
+                            if (venue != null)
+                              _Detail(
+                                  Icons.place_outlined,
+                                  tr('ticket.venue'),
+                                  [venue.name, venue.address]
+                                      .where((s) => s.isNotEmpty)
+                                      .join(', ')),
+                            if (t.seat != null)
+                              _Detail(Icons.event_seat_outlined,
+                                  tr('seat.seat'), t.seat!),
+                            if (attendee.isNotEmpty)
+                              _Detail(Icons.person_outline,
+                                  tr('ticket.attendee'), attendee),
                           ],
                         ),
                       ),
@@ -274,6 +328,11 @@ class TicketScreen extends StatelessWidget {
               ),
               const SizedBox(height: 18),
               if (accessible) _PdfButton(ticket: t),
+              // Also offered when the event was cancelled, to remove it.
+              if (t.status != TicketStatus.refunded) ...[
+                const SizedBox(height: 8),
+                CalendarButton(eventId: t.eventId),
+              ],
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () => Navigator.push(
@@ -293,6 +352,40 @@ class TicketScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _Detail extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _Detail(this.icon, this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: cs.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: text.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                Text(value,
+                    style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
