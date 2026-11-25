@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/scrolling.dart';
 import '../widgets/seat_map_view.dart';
 
 /// Attendee's seat selection (SRS 4.3.1): pick a section, then its seats.
@@ -167,83 +168,110 @@ class _SeatPickerScreenState extends State<SeatPickerScreen> {
                           onPressed: _loadMap, child: Text(tr('retry'))),
                     ]),
             )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(tr('seat.pickSection'), style: t.bodySmall),
-                const SizedBox(height: 8),
-                HallPlan(
-                  map: map,
-                  activeSectionId: section?.id,
-                  picked: picked,
-                  enabled: (s) => s.selectable || picked.containsKey(s.id),
-                  onTap: _open,
-                ),
-                if (section != null) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    [
-                      section.name,
-                      ?section.ticketTypeName,
-                      if (section.price != null) formatPrice(section.price!),
-                    ].join(' · '),
-                    style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 340,
-                    clipBehavior: Clip.hardEdge,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color:
-                              Theme.of(context).colorScheme.outlineVariant),
+          // The page itself does not scroll: dragging belongs to the seats.
+          : LayoutBuilder(builder: (context, box) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: box.maxHeight * 0.28,
+                      child: HallPlan(
+                        map: map,
+                        activeSectionId: section?.id,
+                        picked: picked,
+                        enabled: (s) =>
+                            s.selectable || picked.containsKey(s.id),
+                        onTap: _open,
+                      ),
                     ),
-                    child: _error != null
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(_error!, textAlign: TextAlign.center),
-                                TextButton(
-                                    onPressed: () => _open(section),
-                                    child: Text(tr('retry'))),
-                              ],
-                            ),
-                          )
-                        : seats == null
-                            ? const Center(child: CircularProgressIndicator())
-                            : SeatGrid(
-                                key: ValueKey(section.id),
-                                seats: seats,
-                                selected: _selected.keys.toSet(),
-                                enabled: (s) =>
-                                    s.status == SeatStatus.available ||
-                                    _selected.containsKey(s.id),
-                                onTap: _toggle,
-                              ),
-                  ),
-                  const SizedBox(height: 10),
-                  const SeatLegend(),
-                ],
-                if (_selected.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      for (final s in _selected.values)
-                        InputChip(
-                          label: Text(s.label),
-                          onDeleted: () =>
-                              setState(() => _selected.remove(s.id)),
+                    const SizedBox(height: 8),
+                    if (section == null)
+                      Expanded(
+                        child: Center(
+                          child: Text(tr('seat.pickSection'),
+                              textAlign: TextAlign.center),
                         ),
+                      )
+                    else ...[
+                      Text(
+                        [
+                          section.name,
+                          ?section.ticketTypeName,
+                          if (section.price != null)
+                            formatPrice(section.price!),
+                        ].join(' · '),
+                        style: t.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      Text(tr('seat.dragHint'), style: t.bodySmall),
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: Container(
+                          clipBehavior: Clip.hardEdge,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant),
+                          ),
+                          child: _error != null
+                              ? Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(_error!,
+                                          textAlign: TextAlign.center),
+                                      TextButton(
+                                          onPressed: () => _open(section),
+                                          child: Text(tr('retry'))),
+                                    ],
+                                  ),
+                                )
+                              : seats == null
+                                  ? const Center(
+                                      child: CircularProgressIndicator())
+                                  : SeatGrid(
+                                      key: ValueKey(section.id),
+                                      seats: seats,
+                                      selected: _selected.keys.toSet(),
+                                      enabled: (s) =>
+                                          s.status == SeatStatus.available ||
+                                          _selected.containsKey(s.id),
+                                      onTap: _toggle,
+                                    ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const SizedBox(
+                        height: 22,
+                        child: HorizontalStrip(children: [SeatLegend()]),
+                      ),
                     ],
-                  ),
-                ],
-              ],
-            ),
+                    if (_selected.isNotEmpty)
+                      SizedBox(
+                        height: 52,
+                        child: HorizontalStrip(
+                          children: [
+                            for (final s in _selected.values)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: InputChip(
+                                  label: Text(s.label),
+                                  onDeleted: () =>
+                                      setState(() => _selected.remove(s.id)),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),

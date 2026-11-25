@@ -109,7 +109,7 @@ class BiletFlowApi {
   // --- Attendee: events, orders, tickets ------------------------------------
 
   Future<List<EventInfo>> getEvents() async {
-    final b = await _get('/events', {..._pageAll, 'sort': 'startTime'});
+    final b = await _get('/events', {..._pageAll, 'sort': 'startTime,desc'});
     return PageResult.fromJson(b, EventInfo.fromJson).items;
   }
 
