@@ -6,6 +6,7 @@ import '../payment/bank_native.dart' if (dart.library.js_interop) '../payment/ba
 import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/calendar_button.dart';
 import 'support_screens.dart';
 import 'ticket_screen.dart';
 
@@ -259,7 +260,10 @@ class _OrderScreenState extends State<OrderScreen> {
                             child: Row(
                               children: [
                                 Expanded(
-                                  child: Text('${i.ticketTypeName} × ${i.quantity}'),
+                                  child: Text([
+                                    '${i.ticketTypeName} × ${i.quantity}',
+                                    ?i.seat,
+                                  ].join('\n')),
                                 ),
                                 Text(
                                   i.unitPrice == 0
@@ -395,6 +399,10 @@ class _OrderScreenState extends State<OrderScreen> {
                       child: Text(tr('order.cancel')),
                     ),
                   ),
+                if (o.status == OrderStatus.paid) ...[
+                  const SizedBox(height: 14),
+                  CalendarButton(eventId: o.eventId),
+                ],
                 TextButton.icon(
                   onPressed: _contactSupport,
                   icon: const Icon(Icons.support_agent),
@@ -422,7 +430,7 @@ class _OrderScreenState extends State<OrderScreen> {
                           ),
                           child: Icon(Icons.qr_code_2, color: cs.onPrimaryContainer),
                         ),
-                        title: Text(t.ticketTypeName,
+                        title: Text(t.typeAndSeat,
                             style: const TextStyle(fontWeight: FontWeight.w700)),
                         subtitle: Text(t.code,
                             maxLines: 1,

@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/async_list.dart';
+import '../widgets/date_range_filter.dart';
 import 'order_screen.dart' show orderStatusLabel;
 
 /// Sales of one event (SRS 4.15), calculated by the server from orders:
@@ -20,7 +21,29 @@ class EventSalesScreen extends StatefulWidget {
 }
 
 class _EventSalesScreenState extends State<EventSalesScreen> {
-  late Future<EventSales> _future = api.getEventSales(widget.eventId);
+  DateTime? _from;
+  DateTime? _to;
+  int? _typeId;
+  late Future<EventSales> _future = _loadSales();
+  late Future<Attendance> _attendance = _loadAttendance();
+
+  Future<EventSales> _loadSales() => api.getEventSales(widget.eventId,
+      from: _from, to: _to, ticketTypeId: _typeId);
+
+  Future<Attendance> _loadAttendance() =>
+      api.getAttendance(widget.eventId, ticketTypeId: _typeId);
+
+  void _reload() => setState(() {
+        _future = _loadSales();
+        _attendance = _loadAttendance();
+      });
+
+  void _filter(DateTime? from, DateTime? to, int? typeId) {
+    _from = from;
+    _to = to;
+    _typeId = typeId;
+    _reload();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +62,9 @@ class _EventSalesScreenState extends State<EventSalesScreen> {
             FutureBuilder<EventSales>(
               future: _future,
               builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
+                final loading = snap.connectionState != ConnectionState.done;
+                // While filtering, the previous figures stay on screen.
+                if (loading && !snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snap.hasError) {
@@ -49,23 +74,34 @@ class _EventSalesScreenState extends State<EventSalesScreen> {
                       Text(err is ApiException ? err.message : tr('err.load')),
                       const SizedBox(height: 12),
                       OutlinedButton(
-                        onPressed: () =>
-                            setState(() => _future = api.getEventSales(widget.eventId)),
+                        onPressed: _reload,
                         child: Text(tr('retry')),
                       ),
                     ]),
                   );
                 }
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    setState(() => _future = api.getEventSales(widget.eventId));
-                    await _future.then((_) {}, onError: (_) {});
-                  },
-                  child: _SalesBody(sales: snap.data!),
+                return Stack(
+                  children: [
+                    RefreshIndicator(
+                      onRefresh: () async {
+                        _reload();
+                        await _future.then((_) {}, onError: (_) {});
+                      },
+                      child: _SalesBody(
+                        sales: snap.data!,
+                        attendance: _attendance,
+                        from: _from,
+                        to: _to,
+                        typeId: _typeId,
+                        onFilter: _filter,
+                      ),
+                    ),
+                    if (loading) const LinearProgressIndicator(),
+                  ],
                 );
               },
             ),
-            _OrdersTab(eventId: widget.eventId, onRefund: () => setState(() => _future = api.getEventSales(widget.eventId))),
+            _OrdersTab(eventId: widget.eventId, onRefund: _reload),
           ],
         ),
       ),
@@ -140,7 +176,56 @@ class _StatTile extends StatelessWidget {
 
 class _SalesBody extends StatelessWidget {
   final EventSales sales;
-  const _SalesBody({required this.sales});
+  final Future<Attendance> attendance;
+  final DateTime? from;
+  final DateTime? to;
+  final int? typeId;
+  final void Function(DateTime? from, DateTime? to, int? typeId) onFilter;
+  const _SalesBody({
+    required this.sales,
+    required this.attendance,
+    required this.from,
+    required this.to,
+    required this.typeId,
+    required this.onFilter,
+  });
+
+  Widget _filters(BuildContext context) {
+    final filtered = from != null || to != null || typeId != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DateRangeFilter(
+            from: from, to: to, onChanged: (f, t) => onFilter(f, t, typeId)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int?>(
+          key: ValueKey(typeId),
+          initialValue: typeId,
+          isExpanded: true,
+          decoration: InputDecoration(
+              labelText: tr('filter.ticketType'),
+              isDense: true,
+              border: const OutlineInputBorder()),
+          items: [
+            DropdownMenuItem(value: null, child: Text(tr('filter.allTypes'))),
+            for (final tt in sales.ticketTypes)
+              DropdownMenuItem(value: tt.id, child: Text(tt.name)),
+          ],
+          onChanged: (v) => onFilter(from, to, v),
+        ),
+        const SizedBox(height: 6),
+        Text(tr('filter.scope'), style: Theme.of(context).textTheme.bodySmall),
+        if (filtered)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => onFilter(null, null, null),
+              child: Text(tr('filter.reset')),
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,10 +239,15 @@ class _SalesBody extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         SalesFiguresGrid(f: sales.figures, capacity: sales.capacity),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
+        _filters(context),
+        const SizedBox(height: 12),
+        _AttendanceSection(future: attendance),
+        const SizedBox(height: 16),
         Text(tr('sales.byType'), style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        for (final tt in sales.ticketTypes)
+        for (final tt in sales.ticketTypes
+            .where((x) => typeId == null || x.id == typeId))
           Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
@@ -186,6 +276,19 @@ class _SalesBody extends StatelessWidget {
         const SizedBox(height: 16),
         Text(tr('sales.byDay'), style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
+        if (from != null || to != null || typeId != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              tr('filter.period', {
+                'sold': days.fold<int>(0, (n, d) => n + d.ticketsSold),
+                'revenue': days.isEmpty
+                    ? '0 ₸'
+                    : formatPrice(days.fold<num>(0, (n, d) => n + d.revenue)),
+              }),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
         if (days.isEmpty)
           Text(tr('sales.noSales'), style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
         else
@@ -223,6 +326,54 @@ class _SalesBody extends StatelessWidget {
                 ],
               ),
             ),
+      ],
+    );
+  }
+}
+
+/// Check-in and absent counts of the event (SRS 4.15).
+class _AttendanceSection extends StatelessWidget {
+  final Future<Attendance> future;
+  const _AttendanceSection({required this.future});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(tr('att.title'),
+            style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        FutureBuilder<Attendance>(
+          future: future,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const LinearProgressIndicator();
+            }
+            final a = snap.data;
+            if (a == null) {
+              final err = snap.error;
+              return Text(err is ApiException ? err.message : tr('err.load'));
+            }
+            return LayoutBuilder(builder: (context, c) {
+              final w = (c.maxWidth - 10) / 2;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final (label, value) in [
+                    (tr('att.holders'), '${a.ticketHolders}'),
+                    (tr('att.checkedIn'), '${a.checkedIn}'),
+                    (tr('att.absent'), '${a.absent}'),
+                    (tr('att.rate'), '${a.percent}%'),
+                  ])
+                    SizedBox(width: w, child: _StatTile(label, value)),
+                ],
+              );
+            });
+          },
+        ),
       ],
     );
   }

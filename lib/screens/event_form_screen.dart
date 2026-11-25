@@ -52,6 +52,8 @@ class EventFormState extends State<EventForm> {
   late final _category = TextEditingController(text: widget.event?.category);
   late final _capacity =
       TextEditingController(text: widget.event?.capacity?.toString() ?? '');
+  late final _refundPolicy =
+      TextEditingController(text: widget.event?.refundPolicy);
 
   DateTime? _start;
   DateTime? _end;
@@ -71,6 +73,9 @@ class EventFormState extends State<EventForm> {
   String _posterMime = 'image/jpeg';
 
   bool get _editing => widget.event != null;
+
+  /// A seating plan fixes the venue and the capacity.
+  bool get _seated => widget.event?.assignedSeating ?? false;
 
   @override
   void initState() {
@@ -93,6 +98,7 @@ class EventFormState extends State<EventForm> {
     _description.dispose();
     _category.dispose();
     _capacity.dispose();
+    _refundPolicy.dispose();
     super.dispose();
   }
 
@@ -211,6 +217,7 @@ class EventFormState extends State<EventForm> {
       _description.clear();
       _category.clear();
       _capacity.clear();
+      _refundPolicy.clear();
       _start = null;
       _end = null;
       _regOpen = null;
@@ -243,7 +250,9 @@ class EventFormState extends State<EventForm> {
       if (_end != null) 'endTime': isoLocal(_end!),
       if (_regOpen != null) 'registrationOpeningTime': isoLocal(_regOpen!),
       if (_regClose != null) 'registrationClosingTime': isoLocal(_regClose!),
-      'capacity': ?capacity,
+      if (!_seated) 'capacity': ?capacity,
+      // Sent even when empty, so an existing policy can be removed.
+      'refundPolicy': _refundPolicy.text.trim(),
       'visibilityStatus': _visibility,
       'venueId': _venueId,
     };
@@ -385,10 +394,20 @@ class EventFormState extends State<EventForm> {
                 gap,
                 TextFormField(
                   controller: _capacity,
+                  enabled: !_seated,
                   keyboardType: TextInputType.number,
                   decoration: deco(tr('form.capacity')),
                   validator: (v) =>
                       (v ?? '').trim().isEmpty ? null : _positiveInt(v),
+                ),
+                gap,
+                TextFormField(
+                  controller: _refundPolicy,
+                  decoration: deco(tr('policy.title'))
+                      .copyWith(helperText: tr('policy.hint')),
+                  minLines: 2,
+                  maxLines: 6,
+                  maxLength: 2000,
                 ),
                 gap,
                 Text(tr('form.visibility'),
@@ -431,17 +450,24 @@ class EventFormState extends State<EventForm> {
                                     ),
                                   ),
                               ],
-                              onChanged: (v) => setState(() => _venueId = v),
+                              onChanged: _seated
+                                  ? null
+                                  : (v) => setState(() => _venueId = v),
                             ),
                     ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
                       tooltip: tr('form.newVenue'),
-                      onPressed: _addVenue,
+                      onPressed: _seated ? null : _addVenue,
                       icon: const Icon(Icons.add_location_alt_outlined),
                     ),
                   ],
                 ),
+                if (_seated) ...[
+                  const SizedBox(height: 6),
+                  Text(tr('seat.venueLocked'),
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
                 gap,
                 _posterPicker(context),
                 const SizedBox(height: 28),

@@ -88,7 +88,7 @@ class _TicketStub extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text(ticket.ticketTypeName,
+                      Text(ticket.typeAndSeat,
                           style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                       const SizedBox(height: 10),
                       Row(

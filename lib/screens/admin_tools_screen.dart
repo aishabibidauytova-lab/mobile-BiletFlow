@@ -5,17 +5,19 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/async_list.dart';
 import 'activation_screen.dart' show activationStatusLabel;
+import 'admin_monitoring_tabs.dart';
 import 'support_screens.dart';
 
-/// Platform admin moderation (SRS 4.12): organizer verification, paid-sales
-/// activations, event suspension and escalated support cases.
+/// Platform administration (SRS 4.12): organizer verification, paid-sales
+/// activations, search over events, orders and payments, refund and dispute
+/// monitoring, reported events, fee settings and report export.
 class AdminToolsScreen extends StatelessWidget {
   const AdminToolsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 11,
       child: Scaffold(
         appBar: AppBar(
           title: Text(tr('adm.title')),
@@ -25,14 +27,31 @@ class AdminToolsScreen extends StatelessWidget {
               Tab(text: tr('adm.verification')),
               Tab(text: tr('adm.activations')),
               Tab(text: tr('adm.events')),
+              Tab(text: tr('adm.reports')),
+              Tab(text: tr('adm.orders')),
+              Tab(text: tr('adm.payments')),
+              Tab(text: tr('adm.refunds')),
               Tab(text: tr('adm.escalated')),
+              Tab(text: tr('adm.settings')),
+              Tab(text: tr('adm.export')),
+              Tab(text: tr('adm.venues')),
             ],
           ),
         ),
         body: const TabBarView(
           children: [
-            _VerificationTab(), _ActivationsTab(), _EventsTab(),
+            _VerificationTab(),
+            _ActivationsTab(),
+            AdminEventsTab(),
+            AdminReportsTab(),
+            AdminOrdersTab(),
+            AdminTransactionsTab(),
+            AdminTransactionsTab(refunds: true),
+            // Disputes reach the platform as escalated support cases.
             SupportListScreen(escalatedOnly: true, embedded: true),
+            AdminSettingsTab(),
+            AdminExportTab(),
+            AdminVenuesTab(),
           ],
         ),
       ),
@@ -41,7 +60,8 @@ class AdminToolsScreen extends StatelessWidget {
 }
 
 /// Asks the admin for a reason (suspension, rejection note). Null = cancelled.
-Future<String?> askReason(BuildContext context, String title, {bool required = true}) async {
+Future<String?> askReason(BuildContext context, String title,
+    {bool required = true, String? label}) async {
   final ctrl = TextEditingController();
   final r = await showDialog<String>(
     context: context,
@@ -52,7 +72,8 @@ Future<String?> askReason(BuildContext context, String title, {bool required = t
         autofocus: true,
         maxLines: 3,
         decoration: InputDecoration(
-            labelText: tr('adm.reason'), border: const OutlineInputBorder()),
+            labelText: label ?? tr('adm.reason'),
+            border: const OutlineInputBorder()),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('no'))),
@@ -66,7 +87,6 @@ Future<String?> askReason(BuildContext context, String title, {bool required = t
       ],
     ),
   );
-  ctrl.dispose();
   return r;
 }
 
@@ -243,69 +263,6 @@ class _ActivationsTabState extends State<_ActivationsTab> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _EventsTab extends StatefulWidget {
-  const _EventsTab();
-
-  @override
-  State<_EventsTab> createState() => _EventsTabState();
-}
-
-class _EventsTabState extends State<_EventsTab> {
-  final _list = GlobalKey<AsyncListState<EventInfo>>();
-  final Set<int> _busy = {};
-
-  Future<void> _toggle(EventInfo e) async {
-    String? reason;
-    if (!e.suspended) {
-      reason = await askReason(context, tr('adm.suspendEvent'));
-      if (reason == null) return;
-    }
-    setState(() => _busy.add(e.id));
-    try {
-      e.suspended ? await api.unsuspendEvent(e.id) : await api.suspendEvent(e.id, reason!);
-      if (mounted) {
-        _toast(context, e.suspended ? tr('adm.eventResumed') : tr('adm.eventSuspended'));
-      }
-      await _list.currentState?.reload();
-    } on ApiException catch (err) {
-      if (mounted) _toast(context, err.message);
-    } finally {
-      if (mounted) setState(() => _busy.remove(e.id));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return AsyncList<EventInfo>(
-      key: _list,
-      load: api.getEvents,
-      emptyText: tr('adm.noEvents'),
-      itemBuilder: (context, e) => Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: ListTile(
-          title: Text(e.title),
-          subtitle: Text([
-            e.subtitle,
-            if (e.suspended && e.suspensionReason != null)
-              tr('adm.suspendedBecause', {'reason': e.suspensionReason}),
-          ].where((s) => s.isNotEmpty).join('\n')),
-          trailing: e.suspended
-              ? FilledButton.tonal(
-                  onPressed: _busy.contains(e.id) ? null : () => _toggle(e),
-                  child: Text(tr('adm.resume')),
-                )
-              : OutlinedButton(
-                  style: OutlinedButton.styleFrom(foregroundColor: cs.error),
-                  onPressed: _busy.contains(e.id) ? null : () => _toggle(e),
-                  child: Text(tr('adm.suspend')),
-                ),
-        ),
-      ),
     );
   }
 }

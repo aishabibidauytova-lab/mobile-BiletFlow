@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/l10n.dart';
+import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/campaign_link.dart';
 import '../widgets/language_menu.dart';
 import 'admin_tools_screen.dart';
 import 'admin_users_screen.dart';
+import 'event_detail_screen.dart';
 import 'event_selection_screen.dart';
 import 'events_screen.dart';
 import 'login_screen.dart';
@@ -44,6 +47,35 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _checkStaff();
+    DeepLinks.pending.addListener(_openPendingLink);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingLink());
+  }
+
+  @override
+  void dispose() {
+    DeepLinks.pending.removeListener(_openPendingLink);
+    super.dispose();
+  }
+
+  /// Opens the event of a link the app was launched or resumed with.
+  Future<void> _openPendingLink() async {
+    final link = DeepLinks.pending.value;
+    if (link == null || !mounted) return;
+    DeepLinks.pending.value = null;
+    try {
+      final event = await api.getEvent(link.eventId);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) =>
+                EventDetailScreen(event: event, promo: link.promo)),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('link.openFailed', {'msg': e.message}))));
+    }
   }
 
   Future<void> _checkStaff() async {

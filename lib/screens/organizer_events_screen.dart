@@ -5,6 +5,8 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/async_list.dart';
+import '../widgets/attendance_view.dart';
+import 'event_detail_screen.dart';
 import 'event_form_screen.dart';
 import 'event_sales_screen.dart';
 import 'manage_event_screen.dart';
@@ -28,8 +30,25 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
   int _tab = 0;
   late Future<List<EventInfo>> _future = _load();
   final _formKey = GlobalKey<EventFormState>();
+  String? _phase; // History filter on "My events"; null = all.
 
-  Future<List<EventInfo>> _load() => api.getMyEvents(AuthService.user!.id);
+  Future<List<EventInfo>> _load() => _phase == null
+      ? api.getMyEvents(AuthService.user!.id)
+      : api.getOrganizerEvents(phase: _phase);
+
+  void _setPhase(String? phase) => setState(() {
+        _phase = phase;
+        _future = _load();
+      });
+
+  /// The history filter belongs to "My events": other tabs list every event.
+  void _selectTab(int tab) => setState(() {
+        _tab = tab;
+        if (tab != 0 && _phase != null) {
+          _phase = null;
+          _future = _load();
+        }
+      });
 
   Future<void> _reload() async {
     setState(() => _future = _load());
@@ -56,9 +75,20 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
     if (saved != null) _reload();
   }
 
+  /// Publishing goes through the preview, where it is confirmed.
+  Future<void> _preview(EventInfo e) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => EventDetailScreen(event: e, preview: true)),
+    );
+    _reload();
+  }
+
   Future<void> _onCreated(EventInfo created) async {
     _toast(tr('org.created'));
     _formKey.currentState?.reset();
+    _phase = null;
     await _reload();
     if (mounted) setState(() => _tab = 0);
   }
@@ -107,10 +137,12 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
           return switch (_tab) {
             0 => _MineTab(
                 events: events,
-                onCreate: () => setState(() => _tab = 1),
+                onCreate: () => _selectTab(1),
                 onOpen: _open,
                 onEdit: _edit,
                 onRefresh: _reload,
+                phase: _phase,
+                onPhase: _setPhase,
               ),
             2 => _ManageTab(
                 events: events,
@@ -118,6 +150,7 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
                 onEdit: _edit,
                 onChanged: _reload,
                 onError: _toast,
+                onPreview: _preview,
               ),
             _ => _SalesTab(events: events, onOpen: _open, onRefresh: _reload),
           };
@@ -158,7 +191,7 @@ class _OrganizerEventsScreenState extends State<OrganizerEventsScreen> {
                         fontWeight: FontWeight.w700,
                         color: _tab == i ? cs.onPrimary : cs.onSurface,
                       ),
-                      onSelected: (_) => setState(() => _tab = i),
+                      onSelected: (_) => _selectTab(i),
                     ),
                 ],
               ),
@@ -231,12 +264,16 @@ class _MineTab extends StatelessWidget {
   final Future<void> Function(EventInfo, {String? section}) onOpen;
   final Future<void> Function(EventInfo) onEdit;
   final Future<void> Function() onRefresh;
+  final String? phase;
+  final ValueChanged<String?> onPhase;
   const _MineTab({
     required this.events,
     required this.onCreate,
     required this.onOpen,
     required this.onEdit,
     required this.onRefresh,
+    required this.phase,
+    required this.onPhase,
   });
 
   @override
@@ -252,13 +289,35 @@ class _MineTab extends StatelessWidget {
         label: Text(tr('org.new')),
       ),
       child: Expanded(
+        child: Column(children: [
+        SizedBox(
+          height: 48,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+            children: [
+              for (final p in [null, ...eventPhases])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(p == null ? tr('support.all') : tr('phase.$p')),
+                    selected: phase == p,
+                    onSelected: (_) => onPhase(p),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
         child: RefreshIndicator(
           onRefresh: onRefresh,
           child: events.isEmpty
               ? ListView(children: [
                   Padding(
                     padding: const EdgeInsets.all(32),
-                    child: Text(tr('org.empty'), textAlign: TextAlign.center),
+                    child: Text(
+                        tr(phase == null ? 'org.empty' : 'phase.empty'),
+                        textAlign: TextAlign.center),
                   ),
                 ])
               : ListView.separated(
@@ -289,8 +348,11 @@ class _MineTab extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              [if (e.venue != null) e.venue!.name, if (e.startTime != null) formatDateTime(e.startTime!)]
-                                  .join(' · '),
+                              [
+                                if (e.phase != null) tr('phase.${e.phase}'),
+                                if (e.venue != null) e.venue!.name,
+                                if (e.startTime != null) formatDateTime(e.startTime!),
+                              ].join(' · '),
                               style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                             ),
                             Wrap(
@@ -316,6 +378,8 @@ class _MineTab extends StatelessWidget {
                   },
                 ),
         ),
+        ),
+        ]),
       ),
     );
   }
@@ -329,12 +393,14 @@ class _ManageTab extends StatefulWidget {
   final Future<void> Function(EventInfo) onEdit;
   final Future<void> Function() onChanged;
   final void Function(String) onError;
+  final Future<void> Function(EventInfo) onPreview;
   const _ManageTab({
     required this.events,
     required this.onOpen,
     required this.onEdit,
     required this.onChanged,
     required this.onError,
+    required this.onPreview,
   });
 
   @override
@@ -448,12 +514,10 @@ class _ManageTabState extends State<_ManageTab> {
                                   FilledButton.tonal(
                                     onPressed: busy
                                         ? null
-                                        : () => _run(
-                                              e,
-                                              () => e.status == 'PUBLISHED'
-                                                  ? api.unpublishEvent(e.id)
-                                                  : api.publishEvent(e.id),
-                                            ),
+                                        : e.status == 'PUBLISHED'
+                                            ? () => _run(
+                                                e, () => api.unpublishEvent(e.id))
+                                            : () => widget.onPreview(e),
                                     child: Text(e.status == 'PUBLISHED'
                                         ? tr('org.unpublishShort')
                                         : tr('org.publishShort')),
@@ -560,6 +624,10 @@ class _SalesTabState extends State<_SalesTab> {
                                 Text('${tr('sales.net')}: ${formatPrice(s.figures.netRevenue)}'),
                               ],
                             ),
+                            const SizedBox(height: 4),
+                            // A new key after each refresh reloads the counts.
+                            AttendanceLine(
+                                key: ObjectKey(s), eventId: s.eventId),
                             const SizedBox(height: 8),
                             Wrap(
                               spacing: 8,

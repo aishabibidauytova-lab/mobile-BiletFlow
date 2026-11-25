@@ -9,10 +9,13 @@ import '../widgets/date_time_field.dart';
 import '../widgets/event_poster.dart';
 import 'activation_screen.dart';
 import 'campaigns_screen.dart';
+import 'event_detail_screen.dart';
 import 'event_form_screen.dart';
+import 'event_history_screen.dart';
 import 'event_sales_screen.dart';
 import 'organizer_events_screen.dart' show eventStatusColor;
 import 'scanner_screen.dart';
+import 'seating_setup_screen.dart';
 
 /// Organizer's control panel for one event: poster, status actions,
 /// ticket types and check-in staff.
@@ -130,10 +133,18 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
     }
   }
 
-  Future<void> _togglePublish() => _run(() async {
-        final updated = _event.status == 'PUBLISHED'
-            ? await api.unpublishEvent(_event.id)
-            : await api.publishEvent(_event.id);
+  /// Shows the page as attendees will see it. A draft is published from there.
+  Future<void> _preview() async {
+    final published = await Navigator.push<EventInfo>(
+      context,
+      MaterialPageRoute(
+          builder: (_) => EventDetailScreen(event: _event, preview: true)),
+    );
+    if (published != null && mounted) setState(() => _event = published);
+  }
+
+  Future<void> _unpublish() => _run(() async {
+        final updated = await api.unpublishEvent(_event.id);
         setState(() => _event = updated);
       });
 
@@ -175,7 +186,8 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
   Future<void> _editTicketType([TicketType? type]) async {
     final body = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => _TicketTypeDialog(type: type),
+      builder: (_) => _TicketTypeDialog(
+          type: type, assignedSeating: _event.assignedSeating),
     );
     if (body == null) return;
     await _run(() async {
@@ -353,9 +365,18 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                             icon: const Icon(Icons.edit_outlined),
                             label: Text(tr('edit')),
                           ),
+                          FilledButton.tonalIcon(
+                            onPressed: _busy ? null : _preview,
+                            icon: const Icon(Icons.preview_outlined),
+                            label: Text(tr('preview.button')),
+                          ),
                           if (!cancelled)
                             FilledButton.icon(
-                              onPressed: _busy ? null : _togglePublish,
+                              onPressed: _busy
+                                  ? null
+                                  : e.status == 'PUBLISHED'
+                                      ? _unpublish
+                                      : _preview,
                               icon: Icon(e.status == 'PUBLISHED'
                                   ? Icons.visibility_off_outlined
                                   : Icons.publish),
@@ -388,6 +409,30 @@ class _ManageEventScreenState extends State<ManageEventScreen> {
                             ),
                             icon: const Icon(Icons.insights),
                             label: Text(tr('sales.title')),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: _busy || cancelled
+                                ? null
+                                : () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              SeatingSetupScreen(event: e)),
+                                    );
+                                    _reload();
+                                  },
+                            icon: const Icon(Icons.event_seat_outlined),
+                            label: Text(tr('seat.setup')),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => EventHistoryScreen(event: e)),
+                            ),
+                            icon: const Icon(Icons.history),
+                            label: Text(tr('hist.title')),
                           ),
                           FilledButton.tonalIcon(
                             onPressed: cancelled
@@ -545,7 +590,10 @@ class _Pill extends StatelessWidget {
 /// Create / edit ticket type. Pops with the request body.
 class _TicketTypeDialog extends StatefulWidget {
   final TicketType? type;
-  const _TicketTypeDialog({this.type});
+
+  /// The quantity then comes from the sections that sell this type.
+  final bool assignedSeating;
+  const _TicketTypeDialog({this.type, this.assignedSeating = false});
 
   @override
   State<_TicketTypeDialog> createState() => _TicketTypeDialogState();
@@ -595,7 +643,8 @@ class _TicketTypeDialogState extends State<_TicketTypeDialog> {
       'name': _name.text.trim(),
       'description': _description.text.trim(),
       'price': num.parse(_price.text.trim().replaceAll(',', '.')),
-      'quantity': int.parse(_quantity.text.trim()),
+      if (!widget.assignedSeating)
+        'quantity': int.parse(_quantity.text.trim()),
       'maxPerOrder': ?max,
       if (_salesStart != null) 'salesStart': isoLocal(_salesStart!),
       if (_salesEnd != null) 'salesEnd': isoLocal(_salesEnd!),
@@ -635,12 +684,15 @@ class _TicketTypeDialogState extends State<_TicketTypeDialog> {
                   validator: _money,
                 ),
                 gap,
-                TextFormField(
-                  controller: _quantity,
-                  keyboardType: TextInputType.number,
-                  decoration: deco(tr('tt.quantity')),
-                  validator: _int,
-                ),
+                if (widget.assignedSeating)
+                  Text(tr('seat.quantityHint'))
+                else
+                  TextFormField(
+                    controller: _quantity,
+                    keyboardType: TextInputType.number,
+                    decoration: deco(tr('tt.quantity')),
+                    validator: _int,
+                  ),
                 gap,
                 TextFormField(
                   controller: _maxPerOrder,
